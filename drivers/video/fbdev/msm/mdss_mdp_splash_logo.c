@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,6 +39,7 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 	struct msm_fb_splash_info *sinfo;
 	unsigned long buf_size = size;
 	struct mdss_data_type *mdata;
+	struct ion_handle *handle;
 
 	if (!mfd || !size)
 		return -EINVAL;
@@ -46,14 +47,22 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 	mdata = mfd_to_mdata(mfd);
 	sinfo = &mfd->splash_info;
 
-	if (!mdata || sinfo->splash_buffer)
+	if (!mdata || !mdata->iclient || sinfo->splash_buffer)
 		return -EINVAL;
 
-	sinfo->dma_buf = ion_alloc(size, ION_HEAP(ION_SYSTEM_HEAP_ID), 0);
-	if (IS_ERR_OR_NULL(sinfo->dma_buf)) {
+	handle = ion_alloc(mdata->iclient, size, SZ_4K,
+				ION_HEAP(ION_SYSTEM_HEAP_ID), 0);
+	if (IS_ERR_OR_NULL(handle)) {
 		pr_err("ion memory allocation failed\n");
-		rc = PTR_RET(sinfo->dma_buf);
+		rc = PTR_RET(handle);
 		goto end;
+	}
+
+	sinfo->size = size;
+	sinfo->dma_buf = ion_share_dma_buf(mdata->iclient, handle);
+	if (IS_ERR(sinfo->dma_buf)) {
+		rc = PTR_ERR(sinfo->dma_buf);
+		goto imap_err;
 	}
 
 	sinfo->attachment = mdss_smmu_dma_buf_attach(sinfo->dma_buf,
@@ -87,7 +96,10 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 		goto kmap_err;
 	}
 
-	dma_buf_put(sinfo->dma_buf);
+	/**
+	 * dma_buf has the reference
+	 */
+	ion_free(mdata->iclient, handle);
 
 	return rc;
 kmap_err:
@@ -100,6 +112,8 @@ err_detach:
 	dma_buf_detach(sinfo->dma_buf, sinfo->attachment);
 err_put:
 	dma_buf_put(sinfo->dma_buf);
+imap_err:
+	ion_free(mdata->iclient, handle);
 end:
 	return rc;
 }
@@ -115,11 +129,10 @@ static void mdss_mdp_splash_free_memory(struct msm_fb_data_type *mfd)
 	sinfo = &mfd->splash_info;
 	mdata = mfd_to_mdata(mfd);
 
-	if (!mdata || !sinfo->dma_buf)
+	if (!mdata || !mdata->iclient || !sinfo->dma_buf)
 		return;
 
-	dma_buf_end_cpu_access(sinfo->dma_buf,
-			       DMA_BIDIRECTIONAL);
+	dma_buf_end_cpu_access(sinfo->dma_buf, DMA_BIDIRECTIONAL);
 	dma_buf_kunmap(sinfo->dma_buf, 0, sinfo->splash_buffer);
 
 	mdss_smmu_unmap_dma_buf(sinfo->table, MDSS_IOMMU_DOMAIN_UNSECURE, 0,
@@ -166,7 +179,7 @@ static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
 	}
 
 	ret = mdss_iommu_ctrl(1);
-	if (IS_ERR_VALUE((unsigned long) ret)) {
+	if (IS_ERR_VALUE((unsigned long)ret)) {
 		pr_err("mdss iommu attach failed\n");
 		goto end;
 	}
@@ -220,6 +233,13 @@ void mdss_mdp_release_splash_pipe(struct msm_fb_data_type *mfd)
 	if (sinfo->pipe_ndx[1] != INVALID_PIPE_INDEX)
 		mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[1]);
 	sinfo->splash_pipe_allocated = false;
+
+	/*
+	 * Once the splash pipe is released, reset the splash flag which
+	 * is being stored in var.reserved[3].
+	 */
+	mfd->fbi->var.reserved[3] = mfd->panel_info->cont_splash_enabled |
+					mfd->splash_info.splash_pipe_allocated;
 }
 
 /*
@@ -285,7 +305,7 @@ int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 		 */
 		if (mdp5_data->handoff && ctl && ctl->is_video_mode) {
 			rc = mdss_mdp_display_commit(ctl, NULL, NULL);
-			if (!IS_ERR_VALUE((unsigned long) rc)) {
+			if (!IS_ERR_VALUE((unsigned long)rc)) {
 				mdss_mdp_display_wait4comp(ctl);
 			} else {
 				/*
@@ -308,6 +328,13 @@ int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 	}
 
 	mdss_mdp_ctl_splash_finish(ctl, mdp5_data->handoff);
+
+	/*
+	 * Once the splash cleanup is done, reset the splash flag which
+	 * is being stored in var.reserved[3].
+	 */
+	mfd->fbi->var.reserved[3] = mfd->panel_info->cont_splash_enabled |
+					mfd->splash_info.splash_pipe_allocated;
 
 	if (mdp5_data->splash_mem_addr &&
 		!mfd->splash_info.iommu_dynamic_attached) {
@@ -411,7 +438,7 @@ static int mdss_mdp_splash_kickoff(struct msm_fb_data_type *mfd,
 	 * 1. split display disabled
 	 * 2. splash image is only on one side of panel
 	 * 3. source split is enabled and splash image is within line
-	 *    buffer boundary
+	 *    buffer boundry
 	 */
 	use_single_pipe =
 		!is_split_lm(mfd) ||
@@ -500,9 +527,9 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	fbi = mfd->fbi;
 	sinfo = &mfd->splash_info;
 
-	if (fbi->var.xres < SPLASH_IMAGE_WIDTH ||
-		  fbi->var.yres < SPLASH_IMAGE_HEIGHT ||
-		  (fbi->var.bits_per_pixel >> 3) < SPLASH_IMAGE_BPP) {
+	if (SPLASH_IMAGE_WIDTH > fbi->var.xres ||
+		  SPLASH_IMAGE_HEIGHT > fbi->var.yres ||
+		  SPLASH_IMAGE_BPP > (fbi->var.bits_per_pixel >> 3)) {
 		pr_err("invalid splash parameter configuration\n");
 		rc = -EINVAL;
 		goto end;
@@ -533,8 +560,16 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	rc = mdss_mdp_splash_kickoff(mfd, &src_rect, &dest_rect);
 	if (rc)
 		pr_err("splash image display failed\n");
-	else
+	else {
 		sinfo->splash_pipe_allocated = true;
+		/*
+		 * Once the splash pipe is allocated, set the splash flag which
+		 * is being stored in var.reserved[3].
+		 */
+		mfd->fbi->var.reserved[3] =
+					mfd->panel_info->cont_splash_enabled |
+					mfd->splash_info.splash_pipe_allocated;
+	}
 end:
 	return rc;
 }

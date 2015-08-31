@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +14,7 @@
 #ifndef MDSS_FB_H
 #define MDSS_FB_H
 
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 #include <linux/list.h>
 #include <linux/msm_mdp_ext.h>
 #include <linux/types.h>
@@ -237,9 +237,6 @@ struct msm_mdp_interface {
 	int (*pp_release_fnc)(struct msm_fb_data_type *mfd);
 	void (*signal_retire_fence)(struct msm_fb_data_type *mfd,
 					int retire_cnt);
-	int (*enable_panel_disable_mode)(struct msm_fb_data_type *mfd,
-		bool disable_panel);
-	bool (*is_twm_en)(void);
 	void *private1;
 };
 
@@ -315,8 +312,8 @@ struct msm_fb_data_type {
 	u32 calib_mode;
 	u32 calib_mode_bl;
 	u32 ad_bl_level;
-	u64 bl_level;
-	u64 bl_extn_level;
+	u32 bl_level;
+	int bl_extn_level;
 	u32 bl_scale;
 	u32 unset_bl_level;
 	bool allow_bl_update;
@@ -358,6 +355,8 @@ struct msm_fb_data_type {
 
 	u32 dcm_state;
 	struct list_head file_list;
+	struct ion_client *fb_ion_client;
+	struct ion_handle *fb_ion_handle;
 	struct dma_buf *fbmem_buf;
 	struct dma_buf_attachment *fb_attachment;
 	struct sg_table *fb_table;
@@ -369,6 +368,19 @@ struct msm_fb_data_type {
 
 	int fb_mmap_type;
 	struct led_trigger *boot_notification_led;
+
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+	/* speed up wakeup */
+	/* do unblank (>150ms) on own kworker
+	 * so we don't starve other works
+	 */
+	struct workqueue_struct *unblank_kworker;
+	struct work_struct unblank_work;
+	bool early_unblank_completed;
+ #ifdef CONFIG_FBDEV_SOMC_PANEL_INCELL
+	bool off_sts;
+ #endif
+#endif
 
 	/* Following is used for dynamic mode switch */
 	enum dyn_mode_switch_state switch_state;
@@ -391,7 +403,7 @@ static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
 		if (mfd->no_update.timer.function)
 			del_timer(&(mfd->no_update.timer));
 
-		mfd->no_update.timer.expires = jiffies + (2 * HZ);
+		mfd->no_update.timer.expires = jiffies + msecs_to_jiffies(2000);
 		add_timer(&mfd->no_update.timer);
 		mutex_unlock(&mfd->no_update.lock);
 	}
@@ -486,7 +498,4 @@ void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 						struct fb_var_screeninfo *var);
 void mdss_fb_calc_fps(struct msm_fb_data_type *mfd);
 void mdss_fb_idle_pc(struct msm_fb_data_type *mfd);
-extern struct dma_buf *ion_alloc(size_t len, unsigned int heap_id_mask,
-							unsigned int flags);
-
 #endif /* MDSS_FB_H */

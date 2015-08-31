@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +15,7 @@
 
 #include <video/msm_dba.h>
 #include <linux/extcon.h>
-#include <../../../extcon/extcon.h>
+
 #include "mdss_dba_utils.h"
 #include "mdss_hdmi_edid.h"
 #include "mdss_cec_core.h"
@@ -244,13 +244,13 @@ static ssize_t mdss_dba_utils_sysfs_rda_hpd(struct device *dev,
 	return ret;
 }
 
-static DEVICE_ATTR(connected, 0444,
+static DEVICE_ATTR(connected, S_IRUGO,
 		mdss_dba_utils_sysfs_rda_connected, NULL);
 
-static DEVICE_ATTR(video_mode, 0444,
+static DEVICE_ATTR(video_mode, S_IRUGO,
 		mdss_dba_utils_sysfs_rda_video_mode, NULL);
 
-static DEVICE_ATTR(hpd, 0644, mdss_dba_utils_sysfs_rda_hpd,
+static DEVICE_ATTR(hpd, S_IRUGO | S_IWUSR, mdss_dba_utils_sysfs_rda_hpd,
 		mdss_dba_utils_sysfs_wta_hpd);
 
 static struct attribute *mdss_dba_utils_fs_attrs[] = {

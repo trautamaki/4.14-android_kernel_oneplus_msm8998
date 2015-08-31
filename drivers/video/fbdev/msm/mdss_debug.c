@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -485,8 +485,7 @@ static ssize_t mdss_debug_base_offset_write(struct file *file,
 
 	buf[count] = 0;	/* end of string */
 
-	if (sscanf(buf, "%5x %x", &off, &cnt) != 2)
-		return -EFAULT;
+	sscanf(buf, "%5x %x", &off, &cnt);
 
 	if (off % sizeof(u32))
 		return -EINVAL;
@@ -609,6 +608,7 @@ static ssize_t mdss_debug_base_reg_read(struct file *file,
 		dbg->buf = kzalloc(dbg->buf_len, GFP_KERNEL);
 
 		if (!dbg->buf) {
+			pr_err("not enough memory to hold reg dump\n");
 			mutex_unlock(&mdss_debug_lock);
 			return -ENOMEM;
 		}
@@ -769,6 +769,7 @@ static int parse_dt_xlog_dump_list(const u32 *arr, int count,
 	u32 len;
 	int i, total_names, total_xin_ids, rc;
 	u32 *offsets = NULL;
+	struct property *pp;
 
 	/* Get the property with the name of the ranges */
 	total_names = of_property_count_strings(pdev->dev.of_node,
@@ -778,8 +779,8 @@ static int parse_dt_xlog_dump_list(const u32 *arr, int count,
 		total_names = 0;
 	}
 
-	of_find_property(pdev->dev.of_node, xin_prop, &total_xin_ids);
-	if (total_xin_ids > 0) {
+	pp = of_find_property(pdev->dev.of_node, xin_prop, &total_xin_ids);
+	if (pp && total_xin_ids > 0) {
 		total_xin_ids /= sizeof(u32);
 		offsets = kcalloc(total_xin_ids, sizeof(u32), GFP_KERNEL);
 		if (offsets) {
@@ -935,7 +936,7 @@ static ssize_t mdss_debug_perf_mode_write(struct file *file,
 
 	buf[count] = 0;	/* end of string */
 
-	if (kstrtoint(buf, 10, &perf_mode) != 1)
+	if (sscanf(buf, "%d", &perf_mode) != 1)
 		return -EFAULT;
 
 	if (perf_mode) {
@@ -1017,20 +1018,20 @@ static int mdss_debug_set_panic_signal(struct mdss_mdp_pipe *pipe_pool,
 
 	for (i = 0; i < pool_size; i++) {
 		pipe = pipe_pool + i;
-		if (pipe && (refcount_read(&pipe->kref.refcount) != 0) &&
+		if (pipe && (atomic_read(&pipe->kref.refcount) != 0) &&
 			mdss_mdp_panic_signal_support_mode(mdata)) {
 			mdss_mdp_pipe_panic_signal_ctrl(pipe, enable);
 			pr_debug("pnum:%d count:%d img:%dx%d ",
 				pipe->num, pipe->play_cnt, pipe->img_width,
 				pipe->img_height);
-			pr_debug("src[%d,%d,%d,%d] dst[%d,%d,%d,%d]\n",
+			pr_cont("src[%d,%d,%d,%d] dst[%d,%d,%d,%d]\n",
 				pipe->src.x, pipe->src.y, pipe->src.w,
 				pipe->src.h, pipe->dst.x, pipe->dst.y,
 				pipe->dst.w, pipe->dst.h);
 			cnt++;
 		} else if (pipe) {
 			pr_debug("Inactive pipe num:%d supported:%d\n",
-			       refcount_read(&pipe->kref.refcount),
+			       atomic_read(&pipe->kref.refcount),
 			       mdss_mdp_panic_signal_support_mode(mdata));
 		}
 	}
@@ -1072,7 +1073,7 @@ static ssize_t mdss_debug_perf_panic_write(struct file *file,
 
 	buf[count] = 0;	/* end of string */
 
-	if (kstrtoint(buf, 10, &disable_panic) != 1)
+	if (sscanf(buf, "%d", &disable_panic) != 1)
 		return -EFAULT;
 
 	if (disable_panic) {
@@ -1271,9 +1272,10 @@ int mdss_debugfs_init(struct mdss_data_type *mdata)
 	}
 
 	mdd = kzalloc(sizeof(*mdd), GFP_KERNEL);
-	if (!mdd)
+	if (!mdd) {
+		pr_err("no memory to create mdss debug data\n");
 		return -ENOMEM;
-
+	}
 	INIT_LIST_HEAD(&mdd->base_list);
 
 	mdd->root = debugfs_create_dir("mdp", NULL);
@@ -1448,9 +1450,6 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 					case MDSS_MDP_INTF2:
 						block_id = DISPLAY_MISR_DSI1;
 						break;
-					case MDSS_MDP_INTF3:
-						block_id = DISPLAY_MISR_HDMI;
-						break;
 					default:
 						pr_err("Unmatch INTF for Dual LM single display configuration, INTF:%d\n",
 								ctl->intf_num);
@@ -1496,7 +1495,7 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 				}
 			}
 			/*
-			 * For msm8916/8939, additional offset of 0x10
+			 * For msm8916/8939/8952, additional offset of 0x10
 			 * is required
 			 */
 			if ((mdata->mdp_rev == MDSS_MDP_HW_REV_106) ||
@@ -1667,7 +1666,7 @@ int mdss_misr_set(struct mdss_data_type *mdata,
 	map->is_ping_full = false;
 	map->is_pong_full = false;
 
-	if (map->crc_op_mode != MISR_OP_BM) {
+	if (MISR_OP_BM != map->crc_op_mode) {
 
 		writel_relaxed(config,
 				mdata->mdp_base + map->ctrl_reg);
@@ -1774,7 +1773,7 @@ int mdss_misr_get(struct mdss_data_type *mdata,
 		resp->crc_op_mode = map->crc_op_mode;
 		break;
 	default:
-		ret = -ENOTSUPP;
+		ret = -ENOSYS;
 		break;
 	}
 
@@ -1833,9 +1832,9 @@ void mdss_misr_crc_collect(struct mdss_data_type *mdata, int block_id,
 				}
 				pr_debug("USE BUFF %s\n", map->use_ping ?
 					"PING" : "PONG");
-				pr_debug("%s: PING BUF %s\n", __func__,
+				pr_debug("mdss_misr_crc_collect PING BUF %s\n",
 					map->is_ping_full ? "FULL" : "EMPTRY");
-				pr_debug("%s: PONG BUF %s\n", __func__,
+				pr_debug("mdss_misr_crc_collect PONG BUF %s\n",
 					map->is_pong_full ? "FULL" : "EMPTRY");
 			}
 		} else {
@@ -1849,7 +1848,7 @@ void mdss_misr_crc_collect(struct mdss_data_type *mdata, int block_id,
 				mdata->mdp_base + map->ctrl_reg);
 		}
 
-	} else if (status == 0) {
+	} else if (0 == status) {
 
 		if (mdata->mdp_rev < MDSS_MDP_HW_REV_105)
 			writel_relaxed(MISR_CRC_BATCH_CFG,
@@ -1866,7 +1865,7 @@ void mdss_misr_crc_collect(struct mdss_data_type *mdata, int block_id,
 		vsync_count, crc, map->crc_index);
 	trace_mdp_misr_crc(block_id, vsync_count, crc);
 
-	if (vsync_count == MAX_VSYNC_COUNT) {
+	if (MAX_VSYNC_COUNT == vsync_count) {
 		pr_debug("RESET vsync_count(%d)\n", vsync_count);
 		vsync_count = 0;
 	} else {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,7 @@
 #include <linux/msm_mdp.h>
 #include <linux/memblock.h>
 #include <linux/file.h>
+
 #include <soc/qcom/event_timer.h>
 #include "mdss.h"
 #include "mdss_debug.h"
@@ -281,7 +282,6 @@ static int mdss_mdp_destination_scaler_pre_validate(struct mdss_mdp_ctl *ctl,
 	struct mdss_data_type *mdata;
 	struct mdss_panel_info *pinfo;
 	u16 mxleft_w = 0, mxleft_h = 0, mxright_w = 0, mxright_h = 0;
-
 	mdata = ctl->mdata;
 
 	/*
@@ -526,7 +526,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 			break;
 		}
 	} else {
-		pr_err("NULL destination scaler data\n");
+		pr_err("NULL destionation scaler data\n");
 		return -EFAULT;
 	}
 
@@ -990,8 +990,9 @@ static int __validate_layer_reconfig(struct mdp_input_layer *layer,
 	 * Invalidate any reconfig of CSC block on staged pipe.
 	 */
 	if (!is_csc_db &&
+		((!!pipe->src_fmt->is_yuv != !!layer_src_fmt->is_yuv) ||
 		(pipe->src_fmt->is_yuv && layer_src_fmt->is_yuv &&
-		pipe->csc_coeff_set != layer->color_space)) {
+		pipe->csc_coeff_set != layer->color_space))) {
 		pr_err("CSC reconfig not allowed on staged pipe\n");
 		status = -EINVAL;
 		goto err_exit;
@@ -1235,6 +1236,15 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 		goto end;
 	}
 
+	/* scaling is not allowed for solid_fill layers */
+	if ((pipe->flags & MDP_SOLID_FILL) &&
+		((pipe->src.w != pipe->dst.w) ||
+			(pipe->src.h != pipe->dst.h))) {
+		pr_err("solid fill pipe:%d cannot have scaling\n", pipe->num);
+		ret = -EINVAL;
+		goto end;
+	}
+
 	/*
 	 * unstage the pipe if it's current z_order does not match with new
 	 * z_order because client may only call the validate.
@@ -1277,9 +1287,9 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 		} else if ((mixer_mux == MDSS_MDP_MIXER_MUX_LEFT) &&
 		    ((layer->dst_rect.x + layer->dst_rect.w) > mixer->width)) {
 			if (layer->dst_rect.x >= mixer->width) {
-				pr_err("err dst_x can't lie in right half\n");
-				pr_err("%pS flags:0x%x dst x:%d w:%d lm_w:%d\n",
-					__builtin_return_address(0),
+				pr_err("%pS: err dst_x can't lie in right half",
+					__builtin_return_address(0));
+				pr_cont(" flags:0x%x dst x:%d w:%d lm_w:%d\n",
 					layer->flags, layer->dst_rect.x,
 					layer->dst_rect.w, mixer->width);
 				ret = -EINVAL;
@@ -1407,18 +1417,20 @@ static struct mdss_fence *__create_fence(struct msm_fb_data_type *mfd,
 
 	if ((fence_type == MDSS_MDP_RETIRE_FENCE) &&
 		(mfd->panel.type == MIPI_CMD_PANEL)) {
-		if (sync_pt_data->timeline_retire) {
-			value = sync_pt_data->timeline_retire->value + 1 +
-				mdp5_data->retire_cnt++;
+		if (mdp5_data->vsync_timeline) {
+			value = 1 + mdp5_data->retire_cnt++;
 			sync_fence = mdss_fb_sync_get_fence(
-				sync_pt_data->timeline_retire,
-				fence_name, value);
+				mdp5_data->vsync_timeline, fence_name,
+				value);
 		} else {
 			return ERR_PTR(-EPERM);
 		}
 	} else if (fence_type == MDSS_MDP_CWB_RETIRE_FENCE) {
-		sync_fence = mdss_fb_sync_get_fence(sync_pt_data->timeline,
-				fence_name, sync_pt_data->timeline_value + 1);
+//		sync_fence = mdss_fb_sync_get_fence(sync_pt_data->timeline,
+//				fence_name, sync_pt_data->timeline_value + 1);
+		sync_fence = mdss_fb_sync_get_fence(
+						sync_pt_data->timeline,
+						fence_name, value + 1);
 	} else {
 		if (fence_type == MDSS_MDP_RETIRE_FENCE)
 			sync_fence = mdss_fb_sync_get_fence(
@@ -1428,7 +1440,6 @@ static struct mdss_fence *__create_fence(struct msm_fb_data_type *mfd,
 			sync_fence = mdss_fb_sync_get_fence(
 						sync_pt_data->timeline,
 						fence_name, value);
-
 	}
 
 	if (IS_ERR_OR_NULL(sync_fence)) {
@@ -1502,7 +1513,7 @@ static int __handle_buffer_fences(struct msm_fb_data_type *mfd,
 		goto sync_fence_err;
 
 	value = sync_pt_data->threshold +
-			atomic_read(&sync_pt_data->commit_cnt);
+ 			atomic_read(&sync_pt_data->commit_cnt);
 
 	release_fence = __create_fence(mfd, sync_pt_data,
 		MDSS_MDP_RELEASE_FENCE, &commit->release_fence, value);
@@ -2238,7 +2249,7 @@ static int __validate_multirect_param(struct msm_fb_data_type *mfd,
 
 	multirect_mode = __multirect_layer_flags_to_mode(
 					layer_list[ndx].flags);
-	if (IS_ERR_VALUE((unsigned long) multirect_mode))
+	if (IS_ERR_VALUE((unsigned long)multirect_mode))
 		return multirect_mode;
 
 	/* nothing to be done if multirect is disabled */
@@ -2277,7 +2288,7 @@ static int __update_multirect_info(struct msm_fb_data_type *mfd,
 	ret = __validate_multirect_param(mfd, validate_info_list,
 				layer_list, ndx, layer_cnt);
 	/* return if we hit error or multirectangle mode is disabled. */
-	if (IS_ERR_VALUE((unsigned long) ret) ||
+	if (IS_ERR_VALUE((unsigned long)ret) ||
 		(!ret && validate_info_list[ndx].multirect.mode ==
 		MDSS_MDP_PIPE_MULTIRECT_NONE))
 		return ret;
@@ -2290,7 +2301,7 @@ static int __update_multirect_info(struct msm_fb_data_type *mfd,
 	pair_index = find_layer(get_pipe_num_from_ndx(
 			layer_list[ndx].pipe_ndx), pair_rect_num,
 			layer_list, layer_cnt, ndx + 1);
-	if (IS_ERR_VALUE((unsigned long) pair_index)) {
+	if (IS_ERR_VALUE((unsigned long)pair_index)) {
 		pr_err("Multirect pair not found for pipe ndx 0x%x\n",
 			layer_list[ndx].pipe_ndx);
 		return -EINVAL;
@@ -2301,7 +2312,7 @@ static int __update_multirect_info(struct msm_fb_data_type *mfd,
 
 	ret = __validate_multirect_param(mfd, validate_info_list,
 				layer_list, pair_index, layer_cnt);
-	if (IS_ERR_VALUE((unsigned long) ret) ||
+	if (IS_ERR_VALUE((unsigned long)ret) ||
 		(validate_info_list[ndx].multirect.mode !=
 		validate_info_list[pair_index].multirect.mode))
 		return -EINVAL;
@@ -2325,7 +2336,7 @@ static int __validate_multirect(struct msm_fb_data_type *mfd,
 	ret = __update_multirect_info(mfd, validate_info_list,
 				layer_list, ndx, layer_cnt, is_rect_num_valid);
 	/* return if we hit error or multirectangle mode is disabled. */
-	if (IS_ERR_VALUE((unsigned long) ret) ||
+	if (IS_ERR_VALUE((unsigned long)ret) ||
 		(!ret && validate_info_list[ndx].multirect.mode ==
 		MDSS_MDP_PIPE_MULTIRECT_NONE))
 		return ret;
@@ -2341,7 +2352,7 @@ static int __validate_multirect(struct msm_fb_data_type *mfd,
 			return -EINVAL;
 	}
 	ret = __multirect_validate_mode(mfd, layers, MDSS_MDP_PIPE_MAX_RECTS);
-	if (IS_ERR_VALUE((unsigned long) ret))
+	if (IS_ERR_VALUE((unsigned long)ret))
 		return ret;
 
 	return 0;
@@ -2499,7 +2510,7 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 			}
 		}
 		rect_num = validate_info_list[i].multirect.num;
-		WARN_ON(rect_num >= MDSS_MDP_PIPE_MAX_RECTS);
+		BUG_ON(rect_num >= MDSS_MDP_PIPE_MAX_RECTS);
 
 		if (rec_ndx[rect_num] & layer_list[i].pipe_ndx) {
 			pr_err("duplicate layer found pipe_ndx=%d rect=%d (0x%x)\n",
@@ -2628,7 +2639,7 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 			rec_destroy_ndx[rect_num] |= pipe->ndx;
 
 		ret = mdss_mdp_pipe_map(pipe);
-		if (IS_ERR_VALUE((unsigned long) ret)) {
+		if (IS_ERR_VALUE((unsigned long)ret)) {
 			pr_err("Unable to map used pipe%d ndx=%x\n",
 				pipe->num, pipe->ndx);
 			layer->error_code = ret;
@@ -2731,7 +2742,7 @@ validate_exit:
 			rec_destroy_ndx[0], rec_destroy_ndx[1], ret);
 	mutex_lock(&mdp5_data->list_lock);
 	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_used, list) {
-		if (IS_ERR_VALUE((unsigned long) ret)) {
+		if (IS_ERR_VALUE((unsigned long)ret)) {
 			if (((pipe->ndx & rec_release_ndx[0]) &&
 					(pipe->multirect.num == 0)) ||
 				((pipe->ndx & rec_release_ndx[1]) &&
@@ -2817,7 +2828,7 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 
 	if (commit->output_layer) {
 		ret = __is_cwb_requested(commit->flags);
-		if (IS_ERR_VALUE((unsigned long) ret)) {
+		if (IS_ERR_VALUE((unsigned long)ret)) {
 			return ret;
 		} else if (ret) {
 			ret = mdss_mdp_layer_pre_commit_cwb(mfd, commit);
@@ -2829,7 +2840,7 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 	}
 
 	ret = mdss_mdp_avr_validate(mfd, commit);
-	if (IS_ERR_VALUE((unsigned long) ret)) {
+	if (IS_ERR_VALUE((unsigned long)ret)) {
 		pr_err("AVR validate failed\n");
 		return -EINVAL;
 	}
@@ -2858,7 +2869,7 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 			ret = __update_multirect_info(mfd, validate_info_list,
 				layer_list, i, layer_count,
 				!!(commit->flags & MDP_COMMIT_RECT_NUM));
-			if (IS_ERR_VALUE((unsigned long) ret)) {
+			if (IS_ERR_VALUE((unsigned long)ret)) {
 				pr_err("error updating multirect config. ret=%d i=%d\n",
 					ret, i);
 				goto end;
@@ -2891,12 +2902,6 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 
 	i = 0;
 
-	ret = mdss_mdp_overlay_start(mfd);
-	if (ret) {
-		pr_err("unable to start overlay %d (%d)\n", mfd->index, ret);
-		goto end;
-	}
-
 	mutex_lock(&mdp5_data->list_lock);
 	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_used, list) {
 		if (pipe->flags & MDP_SOLID_FILL) {
@@ -2914,11 +2919,40 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 	}
 	mutex_unlock(&mdp5_data->list_lock);
 
+	ret = mdss_mdp_overlay_start(mfd);
+	if (ret) {
+		pr_err("unable to start overlay %d (%d)\n", mfd->index, ret);
+		goto map_err;
+	}
+
 	ret = __handle_buffer_fences(mfd, commit, layer_list);
 	if (ret) {
 		pr_err("failed to handle fences for fb: %d", mfd->index);
 		goto map_err;
 	}
+
+	if (mdp5_data->cwb.valid) {
+		struct mdss_fence *retire_fence = NULL;
+
+		if (!commit->output_layer) {
+			pr_err("cwb request without setting output layer\n");
+			goto map_err;
+		}
+
+		retire_fence = __create_fence(mfd,
+				&mdp5_data->cwb.cwb_sync_pt_data,
+				MDSS_MDP_CWB_RETIRE_FENCE,
+				&commit->output_layer->buffer.fence, 0);
+		if (IS_ERR_OR_NULL(retire_fence)) {
+			pr_err("failed to handle cwb fence");
+			goto map_err;
+		}
+
+		//sync_fence_install(retire_fence,
+		//		commit->output_layer->buffer.fence);
+		//mdss_get_fd_sync_fence
+	}
+
 map_err:
 	if (ret) {
 		mutex_lock(&mdp5_data->list_lock);
@@ -2971,7 +3005,7 @@ int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 
 	if (commit->output_layer) {
 		rc = __is_cwb_requested(commit->flags);
-		if (IS_ERR_VALUE((unsigned long) rc)) {
+		if (IS_ERR_VALUE((unsigned long)rc)) {
 			return rc;
 		} else if (rc) {
 			rc = mdss_mdp_cwb_validate(mfd, commit->output_layer);
@@ -2987,7 +3021,7 @@ int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 		if (commit->flags & MDP_COMMIT_PARTIAL_UPDATE_DUAL_ROI) {
 			rc = __validate_dual_partial_update(mdp5_data->ctl,
 					commit);
-			if (IS_ERR_VALUE((unsigned long) rc)) {
+			if (IS_ERR_VALUE((unsigned long)rc)) {
 				pr_err("Multiple pu pre-validate fail\n");
 				return rc;
 			}
@@ -3004,7 +3038,7 @@ int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 			(ds_data->flags & MDP_DESTSCALER_ENABLE)) {
 		rc = mdss_mdp_destination_scaler_pre_validate(mdp5_data->ctl,
 				ds_data, commit->dest_scaler_cnt);
-		if (IS_ERR_VALUE((unsigned long) rc)) {
+		if (IS_ERR_VALUE((unsigned long)rc)) {
 			pr_err("Destination scaler pre-validate failed\n");
 			return -EINVAL;
 		}
@@ -3012,7 +3046,7 @@ int mdss_mdp_layer_atomic_validate(struct msm_fb_data_type *mfd,
 		mdss_mdp_disable_destination_scaler_setup(mdp5_data->ctl);
 
 	rc = mdss_mdp_avr_validate(mfd, commit);
-	if (IS_ERR_VALUE((unsigned long) rc)) {
+	if (IS_ERR_VALUE((unsigned long)rc)) {
 		pr_err("AVR validate failed\n");
 		return -EINVAL;
 	}
@@ -3099,8 +3133,7 @@ int mdss_mdp_layer_pre_commit_wfd(struct msm_fb_data_type *mfd,
 			return PTR_ERR(data);
 
 		if (output_layer->buffer.fence >= 0) {
-			fence = mdss_get_fd_sync_fence(
-						output_layer->buffer.fence);
+			fence = mdss_get_fd_sync_fence(output_layer->buffer.fence);
 			if (!fence) {
 				pr_err("fail to get output buffer fence\n");
 				rc = -EINVAL;

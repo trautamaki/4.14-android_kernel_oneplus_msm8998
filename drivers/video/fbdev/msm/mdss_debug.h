@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -81,8 +81,8 @@ struct vbif_debug_bus {
 #define MDSS_XLOG_IOMMU(...) mdss_xlog(__func__, __LINE__, MDSS_XLOG_IOMMU, \
 		##__VA_ARGS__, DATA_LIMITER)
 
-#define ATRACE_END(name) trace_tracing_mark_write(current->tgid, name, 0)
-#define ATRACE_BEGIN(name) trace_tracing_mark_write(current->tgid, name, 1)
+#define ATRACE_END(name) trace_mdss_mark_write(current->tgid, name, 0)
+#define ATRACE_BEGIN(name) trace_mdss_mark_write(current->tgid, name, 1)
 #define ATRACE_FUNC() ATRACE_BEGIN(__func__)
 
 #define ATRACE_INT(name, value) \
@@ -213,15 +213,11 @@ static inline void mdss_xlog(const char *name, int line, int flag, ...) { }
 static inline void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata) { }
 static inline void mdss_xlog_tout_handler_default(bool queue,
 	const char *name, ...) { }
-static inline u32 get_dump_range(struct dump_offset *range_node,
-						size_t max_offset)
-{
-return 0;
-}
-static inline void mdss_dump_reg(const char *dump_name, u32 reg_dump_flag,
-			char *addr, int len, u32 **dump_mem, bool from_isr)
-{ }
-static inline void mdss_mdp_debug_mid(u32 mid) { }
+u32 get_dump_range(struct dump_offset *range_node, size_t max_offset)
+	{ return 0; }
+void mdss_dump_reg(const char *dump_name, u32 reg_dump_flag, char *addr,
+	int len, u32 **dump_mem, bool from_isr) { }
+void mdss_mdp_debug_mid(u32 mid) { }
 #endif
 
 int mdss_dump_misr_data(char **buf, u32 size);

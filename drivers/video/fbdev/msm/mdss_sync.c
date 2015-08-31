@@ -18,7 +18,7 @@
 #include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/dma-fence.h>
+#include <linux/fence.h>
 #include <linux/sync_file.h>
 
 #include "mdss_sync.h"
@@ -33,7 +33,7 @@
  * @fence_list: linked list of outstanding sync fence
  */
 struct mdss_fence {
-	struct dma_fence base;
+	struct fence base;
 	char name[MDSS_SYNC_NAME_SIZE];
 	struct list_head fence_list;
 };
@@ -43,7 +43,7 @@ struct mdss_fence {
  * to_mdss_fence - get mdss fence from fence base object
  * @fence: Pointer to fence base object
  */
-static struct mdss_fence *to_mdss_fence(struct dma_fence *fence)
+static struct mdss_fence *to_mdss_fence(struct fence *fence)
 {
 	return container_of(fence, struct mdss_fence, base);
 }
@@ -52,7 +52,7 @@ static struct mdss_fence *to_mdss_fence(struct dma_fence *fence)
  * to_mdss_timeline - get mdss timeline from fence base object
  * @fence: Pointer to fence base object
  */
-static struct mdss_timeline *to_mdss_timeline(struct dma_fence *fence)
+static struct mdss_timeline *to_mdss_timeline(struct fence *fence)
 {
 	return container_of(fence->lock, struct mdss_timeline, lock);
 }
@@ -97,24 +97,24 @@ static void mdss_get_timeline(struct mdss_timeline *tl)
 	kref_get(&tl->kref);
 }
 
-static const char *mdss_fence_get_driver_name(struct dma_fence *fence)
+static const char *mdss_fence_get_driver_name(struct fence *fence)
 {
 	return MDSS_SYNC_DRIVER_NAME;
 }
 
-static const char *mdss_fence_get_timeline_name(struct dma_fence *fence)
+static const char *mdss_fence_get_timeline_name(struct fence *fence)
 {
 	struct mdss_timeline *tl = to_mdss_timeline(fence);
 
 	return tl->name;
 }
 
-static bool mdss_fence_enable_signaling(struct dma_fence *fence)
+static bool mdss_fence_enable_signaling(struct fence *fence)
 {
 	return true;
 }
 
-static bool mdss_fence_signaled(struct dma_fence *fence)
+static bool mdss_fence_signaled(struct fence *fence)
 {
 	struct mdss_timeline *tl = to_mdss_timeline(fence);
 	bool status;
@@ -126,7 +126,7 @@ static bool mdss_fence_signaled(struct dma_fence *fence)
 	return status;
 }
 
-static void mdss_fence_release(struct dma_fence *fence)
+static void mdss_fence_release(struct fence *fence)
 {
 	struct mdss_fence *f = to_mdss_fence(fence);
 	struct mdss_timeline *tl = to_mdss_timeline(fence);
@@ -147,12 +147,12 @@ static void mdss_fence_release(struct dma_fence *fence)
 	kfree_rcu(f, base.rcu);
 }
 
-static void mdss_fence_value_str(struct dma_fence *fence, char *str, int size)
+static void mdss_fence_value_str(struct fence *fence, char *str, int size)
 {
 	snprintf(str, size, "%u", fence->seqno);
 }
 
-static void mdss_fence_timeline_value_str(struct dma_fence *fence, char *str,
+static void mdss_fence_timeline_value_str(struct fence *fence, char *str,
 		int size)
 {
 	struct mdss_timeline *tl = to_mdss_timeline(fence);
@@ -160,12 +160,12 @@ static void mdss_fence_timeline_value_str(struct dma_fence *fence, char *str,
 	snprintf(str, size, "%u", tl->value);
 }
 
-static struct dma_fence_ops mdss_fence_ops = {
+static struct fence_ops mdss_fence_ops = {
 	.get_driver_name = mdss_fence_get_driver_name,
 	.get_timeline_name = mdss_fence_get_timeline_name,
 	.enable_signaling = mdss_fence_enable_signaling,
 	.signaled = mdss_fence_signaled,
-	.wait = dma_fence_default_wait,
+	.wait = fence_default_wait,
 	.release = mdss_fence_release,
 	.fence_value_str = mdss_fence_value_str,
 	.timeline_value_str = mdss_fence_timeline_value_str,
@@ -192,7 +192,7 @@ struct mdss_timeline *mdss_create_timeline(const char *name)
 	snprintf(tl->name, sizeof(tl->name), "%s", name);
 	spin_lock_init(&tl->lock);
 	spin_lock_init(&tl->list_lock);
-	tl->context = dma_fence_context_alloc(1);
+	tl->context = fence_context_alloc(1);
 	INIT_LIST_HEAD(&tl->fence_list_head);
 
 	return tl;
@@ -243,12 +243,12 @@ static int mdss_inc_timeline_locked(struct mdss_timeline *tl,
 
 	list_for_each_entry_safe(f, next, &local_list_head, fence_list) {
 		spin_lock_irqsave(&tl->lock, flags);
-		is_signaled = dma_fence_is_signaled_locked(&f->base);
+		is_signaled = fence_is_signaled_locked(&f->base);
 		spin_unlock_irqrestore(&tl->lock, flags);
 		if (is_signaled) {
 			pr_debug("%s signaled\n", f->name);
 			list_del_init(&f->fence_list);
-			dma_fence_put(&f->base);
+			fence_put(&f->base);
 		} else {
 			spin_lock(&tl->list_lock);
 			list_move(&f->fence_list, &tl->fence_list_head);
@@ -305,8 +305,7 @@ struct mdss_fence *mdss_get_sync_fence(
 	INIT_LIST_HEAD(&f->fence_list);
 	spin_lock_irqsave(&tl->lock, flags);
 	tl->next_value = value;
-	dma_fence_init(&f->base, &mdss_fence_ops, &tl->lock, tl->context,
-			value);
+	fence_init(&f->base, &mdss_fence_ops, &tl->lock, tl->context, value);
 	mdss_get_timeline(tl);
 	spin_unlock_irqrestore(&tl->lock, flags);
 
@@ -381,7 +380,7 @@ void mdss_put_sync_fence(struct mdss_fence *fence)
 		return;
 	}
 
-	dma_fence_put((struct dma_fence *) fence);
+	fence_put((struct fence *) fence);
 }
 
 /*
@@ -399,13 +398,13 @@ int mdss_wait_sync_fence(struct mdss_fence *fence,
 		return -EINVAL;
 	}
 
-	rc = dma_fence_wait_timeout((struct dma_fence *) fence, false,
+	rc = fence_wait_timeout((struct fence *) fence, false,
 			msecs_to_jiffies(timeout));
 	if (rc > 0) {
 		pr_debug("fence signaled\n");
 		rc = 0;
 	} else if (rc == 0) {
-		struct dma_fence *input_fence = (struct dma_fence *) fence;
+		struct fence *input_fence = (struct fence *) fence;
 		char timeline_str[MDSS_SYNC_NAME_SIZE];
 
 		if (input_fence->ops->timeline_value_str)
@@ -457,7 +456,7 @@ int mdss_get_sync_fence_fd(struct mdss_fence *fence)
 		return fd;
 	}
 
-	sync_file = sync_file_create((struct dma_fence *) fence);
+	sync_file = sync_file_create((struct fence *) fence);
 	if (!sync_file) {
 		put_unused_fd(fd);
 		pr_err("failed to create sync file\n");

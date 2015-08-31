@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,15 +17,18 @@
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/iommu.h>
+#include <linux/module.h>
+//#include <linux/qcom_iommu.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/module.h>
-#include <linux/clk.h>
+#include <linux/clk/qcom.h>
+
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
 #include <linux/of_platform.h>
 #include <linux/msm_dma_iommu_mapping.h>
 
+#include <linux/qcom_iommu.h>
 #include <linux/mdss_smmu_ext.h>
 
 #include <asm/dma-iommu.h>
@@ -37,15 +40,27 @@
 #include "mdss_debug.h"
 
 #define SZ_4G		0xF0000000
+
+#ifdef CONFIG_QCOM_IOMMU_V1
+#include <linux/qcom_iommu.h>
+static inline struct bus_type *mdss_mmu_get_bus(struct device *dev)
+{
+	return msm_iommu_get_bus(dev);
+}
+static inline struct device *mdss_mmu_get_ctx(const char *name)
+{
+	return msm_iommu_get_ctx(name);
+}
+#else
 static inline struct bus_type *mdss_mmu_get_bus(struct device *dev)
 {
 	return &platform_bus_type;
 }
-
 static inline struct device *mdss_mmu_get_ctx(const char *name)
 {
-	return NULL;
+	return ERR_PTR(-ENODEV);
 }
+#endif
 
 static DEFINE_MUTEX(mdp_iommu_lock);
 
@@ -56,7 +71,7 @@ struct msm_smmu_notifier_data {
 	msm_smmu_handler_t callback;
 };
 
-static struct mdss_smmu_private *mdss_smmu_get_private(void)
+struct mdss_smmu_private *mdss_smmu_get_private(void)
 {
 	return &smmu_private;
 }
@@ -75,10 +90,9 @@ static int mdss_smmu_secure_wait(int State, int request)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int rc = 0;
-	/*
-	 *
-	 * Case1: MDP in Secure Display and Rotator in Non Secure
-	 */
+	/**
+	  * Case1: MDP in Secure Display and Rotator in Non Secure
+	  */
 	if (!State && !request && mdss_get_sd_client_cnt()) {
 		rc = wait_event_timeout(mdata->secure_waitq,
 				(mdss_get_sd_client_cnt() == 0),
@@ -96,10 +110,10 @@ static int mdss_smmu_secure_wait(int State, int request)
 static int mdss_smmu_secure_session_ctrl(int enable)
 {
 	int rc = 0;
-	/*
-	 * Currently client requests only enable/disable.
-	 * TODO: Secure camera is hardcoded need to extend.
-	 */
+	/**
+	  * Currently client requests only enable/disable.
+	  * TODO: Secure camera is hardcoded need to extend.
+	  */
 	rc = mdss_mdp_secure_session_ctrl(enable,
 					  MDP_SECURE_CAMERA_OVERLAY_SESSION);
 	if (rc)
@@ -120,10 +134,7 @@ static inline bool all_devices_probed(struct mdss_smmu_private *prv)
 		return 0;
 
 	for_each_child_of_node(prv->pdev, child) {
-		char name[MDSS_SMMU_COMPAT_STR_LEN] = {};
-
-		strlcpy(name, child->name, sizeof(name));
-		if (is_mdss_smmu_compatible_device(name))
+		if (is_mdss_smmu_compatible_device(child->name))
 			d_cnt++;
 	}
 
@@ -134,7 +145,7 @@ static inline bool all_devices_probed(struct mdss_smmu_private *prv)
 	return (d_cnt && (d_cnt == p_cnt) ? true : false);
 }
 
-static void mdss_iommu_notify_users(struct mdss_smmu_private *prv)
+void mdss_iommu_notify_users(struct mdss_smmu_private *prv)
 {
 	struct msm_smmu_notifier_data *notify;
 	struct mdss_smmu_client *client;
@@ -199,6 +210,7 @@ static int mdss_smmu_util_parse_dt_clock(struct platform_device *pdev,
 	mp->clk_config = devm_kzalloc(&pdev->dev,
 			sizeof(struct dss_clk) * mp->num_clk, GFP_KERNEL);
 	if (!mp->clk_config) {
+		pr_err("clock configuration allocation failed\n");
 		rc = -ENOMEM;
 		mp->num_clk = 0;
 		goto clk_err;
@@ -367,10 +379,8 @@ static int mdss_smmu_attach_v2(struct mdss_data_type *mdata)
 				pr_debug("iommu v2 domain[%i] attached\n", i);
 			}
 		} else {
-			/* Possible that target does not support secure cb */
-			pr_debug("iommu device not present for domain[%d]\n",
-							 i);
-			return 0;
+			pr_err("iommu device not attached for domain[%d]\n", i);
+			return -ENODEV;
 		}
 	}
 
@@ -468,27 +478,22 @@ static int mdss_smmu_map_dma_buf_v2(struct dma_buf *dma_buf,
 		struct sg_table *table, int domain, dma_addr_t *iova,
 		unsigned long *size, int dir)
 {
+	int rc;
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	struct scatterlist *sg;
-	unsigned int i;
-
 	if (!mdss_smmu) {
 		pr_err("not able to get smmu context\n");
 		return -EINVAL;
 	}
-
-	if (!table || !table->sgl) {
-		pr_err("Invalid table and scattergather list for dma buf\n");
-		return -EINVAL;
-	}
-
 	ATRACE_BEGIN("map_buffer");
-	*iova = table->sgl->dma_address;
-
-	*size = 0;
-	for_each_sg(table->sgl, sg, table->nents, i)
-		*size += sg->length;
+	rc = msm_dma_map_sg_lazy(mdss_smmu->base.dev, table->sgl, table->nents,
+				 dir, dma_buf);
+	if (rc != table->nents) {
+		pr_err("dma map sg failed\n");
+		return -ENOMEM;
+	}
 	ATRACE_END("map_buffer");
+	*iova = table->sgl->dma_address;
+	*size = table->sgl->dma_length;
 	return 0;
 }
 
@@ -496,16 +501,14 @@ static void mdss_smmu_unmap_dma_buf_v2(struct sg_table *table, int domain,
 		int dir, struct dma_buf *dma_buf)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	unsigned long attrs = 0;
-
 	if (!mdss_smmu) {
 		pr_err("not able to get smmu context\n");
 		return;
 	}
 
 	ATRACE_BEGIN("unmap_buffer");
-	msm_dma_unmap_sg_attrs(mdss_smmu->base.dev, table->sgl, table->nents,
-			dir, dma_buf, attrs);
+	msm_dma_unmap_sg(mdss_smmu->base.dev, table->sgl, table->nents, dir,
+		 dma_buf);
 	ATRACE_END("unmap_buffer");
 }
 
@@ -665,7 +668,7 @@ int mdss_smmu_fault_handler(struct iommu_domain *domain, struct device *dev,
 		MDSS_XLOG_TOUT_HANDLER("mdp");
 	}
 end:
-	return -ENODEV;
+	return -ENOSYS;
 }
 
 static void mdss_smmu_deinit_v2(struct mdss_data_type *mdata)
@@ -707,15 +710,16 @@ static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
  * mdss_smmu_device_create()
  * @dev: mdss_mdp device
  *
- * For smmu_v2, each context bank is a separate child device of mdss_mdp.
+ * For smmu_v2, each context bank is a seperate child device of mdss_mdp.
  * Platform devices are created for those smmu related child devices of
  * mdss_mdp here. This would facilitate probes to happen for these devices in
- * which the smmu mapping and initialization is handled.
+ * which the smmu mapping and initilization is handled.
  */
 void mdss_smmu_device_create(struct device *dev)
 {
 	struct device_node *parent, *child;
 	struct mdss_smmu_private *prv = mdss_smmu_get_private();
+
 	parent = dev->of_node;
 	for_each_child_of_node(parent, child) {
 		char name[MDSS_SMMU_COMPAT_STR_LEN] = {};
@@ -894,7 +898,7 @@ int mdss_smmu_probe(struct platform_device *pdev)
 
 	iommu_set_fault_handler(mdss_smmu->mmu_mapping->domain,
 			mdss_smmu_fault_handler, mdss_smmu);
-	address = of_get_address(pdev->dev.of_node, 0, 0, 0);
+	address = of_get_address_by_name(pdev->dev.of_node, "mmu_cb", 0, 0);
 	if (address) {
 		size = address + 1;
 		mdss_smmu->mmu_base = ioremap(be32_to_cpu(*address),

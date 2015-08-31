@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +15,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/errno.h>
 #include <linux/file.h>
-#include <linux/ion.h>
+#include <linux/msm_ion.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/major.h>
@@ -930,6 +930,7 @@ void mdss_mdp_data_calc_offset(struct mdss_mdp_data *data, u16 x, u16 y,
 static int mdss_mdp_put_img(struct mdss_mdp_img_data *data, bool rotator,
 		int dir)
 {
+	struct ion_client *iclient = mdss_get_ionclient();
 	u32 domain;
 
 	if (data->flags & MDP_MEMORY_ID_TYPE_FB) {
@@ -942,14 +943,19 @@ static int mdss_mdp_put_img(struct mdss_mdp_img_data *data, bool rotator,
 	} else if (!IS_ERR_OR_NULL(data->srcp_dma_buf)) {
 		pr_debug("ion hdl=%pK buf=0x%pa\n", data->srcp_dma_buf,
 							&data->addr);
+		if (!iclient) {
+			pr_err("invalid ion client\n");
+			return -ENOMEM;
+		} else {
 			if (data->mapped) {
 				domain = mdss_smmu_get_domain_type(data->flags,
 					rotator);
+				mdss_smmu_unmap_dma_buf(data->srcp_table,
+							domain, dir,
+							data->srcp_dma_buf);
 				data->mapped = false;
 			}
 			if (!data->skip_detach) {
-				data->srcp_attachment->dma_map_attrs
-						 |= DMA_ATTR_SKIP_CPU_SYNC;
 				dma_buf_unmap_attachment(data->srcp_attachment,
 					data->srcp_table,
 					mdss_smmu_dma_data_direction(dir));
@@ -958,6 +964,7 @@ static int mdss_mdp_put_img(struct mdss_mdp_img_data *data, bool rotator,
 				dma_buf_put(data->srcp_dma_buf);
 				data->srcp_dma_buf = NULL;
 			}
+		}
 	} else if ((data->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION) ||
 			(data->flags & MDP_SECURE_CAMERA_OVERLAY_SESSION)) {
 		/*
@@ -968,6 +975,8 @@ static int mdss_mdp_put_img(struct mdss_mdp_img_data *data, bool rotator,
 		 * be filled due to map call which will be unmapped above.
 		 *
 		 */
+		if (data->ihandle)
+			ion_free(iclient, data->ihandle);
 		pr_debug("free memory handle for secure display/camera content\n");
 	} else {
 		return -ENOMEM;
@@ -986,6 +995,7 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 	unsigned long *len;
 	u32 domain;
 	dma_addr_t *start;
+	struct ion_client *iclient = mdss_get_ionclient();
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
 	start = &data->addr;
@@ -1010,30 +1020,25 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 			pr_err("invalid FB_MAJOR\n");
 			ret = -1;
 		}
-	} else {
-		data->srcp_dma_buf = dma_buf_get(img->memory_id);
-		if (IS_ERR_OR_NULL(data->srcp_dma_buf)) {
-			pr_err("error on ion_import_fd\n");
-			ret = PTR_ERR(data->srcp_dma_buf);
-			data->srcp_dma_buf = NULL;
-			return ret;
-		}
-
+	} else if (iclient) {
 		if (mdss_mdp_is_map_needed(mdata, data)) {
+			data->srcp_dma_buf = dma_buf_get(img->memory_id);
+			if (IS_ERR_OR_NULL(data->srcp_dma_buf)) {
+				pr_err("error on ion_import_fd\n");
+				ret = PTR_ERR(data->srcp_dma_buf);
+				data->srcp_dma_buf = NULL;
+				return ret;
+			}
 			domain = mdss_smmu_get_domain_type(data->flags,
-						   rotator);
+							   rotator);
+
 			data->srcp_attachment =
 				mdss_smmu_dma_buf_attach(data->srcp_dma_buf,
 							 dev, domain);
-			if (IS_ERR_OR_NULL(data->srcp_attachment)) {
+			if (IS_ERR(data->srcp_attachment)) {
 				ret = PTR_ERR(data->srcp_attachment);
-				pr_err("error during dma buf attach\n");
 				goto err_put;
 			}
-
-
-			data->srcp_attachment->dma_map_attrs |=
-					DMA_ATTR_DELAYED_UNMAP;
 
 			data->srcp_table =
 				dma_buf_map_attachment(data->srcp_attachment,
@@ -1053,23 +1058,16 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 		} else {
 			struct sg_table *sg_ptr = NULL;
 
-			data->srcp_attachment =
-				dma_buf_attach(data->srcp_dma_buf, dev);
-			if (IS_ERR(data->srcp_attachment)) {
-				ret = PTR_ERR(data->srcp_attachment);
-				goto err_put;
+			data->ihandle = ion_import_dma_buf_fd(iclient,
+					img->memory_id);
+			if (IS_ERR_OR_NULL(data->ihandle)) {
+				ret = -EINVAL;
+				pr_err("ion import buffer failed\n");
+				data->ihandle = NULL;
+				goto done;
 			}
-
-			data->srcp_table =
-				dma_buf_map_attachment(data->srcp_attachment,
-				mdss_smmu_dma_data_direction(dir));
-			if (IS_ERR(data->srcp_table)) {
-				ret = PTR_ERR(data->srcp_table);
-				goto err_detach;
-			}
-
 			do {
-				sg_ptr = data->srcp_table;
+				sg_ptr = ion_sg_table(iclient, data->ihandle);
 				if (sg_ptr == NULL) {
 					pr_err("ion sg table get failed\n");
 					ret = -EINVAL;
@@ -1148,7 +1146,7 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data, bool rotator,
 			ret = mdss_smmu_map_dma_buf(data->srcp_dma_buf,
 					data->srcp_table, domain,
 					&data->addr, &data->len, dir);
-			if (IS_ERR_VALUE((unsigned long) ret)) {
+			if (IS_ERR_VALUE((unsigned long)ret)) {
 				pr_err("smmu map dma buf failed: (%d)\n", ret);
 				goto err_unmap;
 			}
@@ -1184,7 +1182,6 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data, bool rotator,
 	return ret;
 
 err_unmap:
-	data->srcp_attachment->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table,
 		mdss_smmu_dma_data_direction(dir));
 	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);

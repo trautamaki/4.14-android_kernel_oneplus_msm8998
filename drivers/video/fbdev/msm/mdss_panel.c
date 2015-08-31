@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -450,8 +450,10 @@ int mdss_panel_debugfs_setup(struct mdss_panel_info *panel_info, struct dentry
 {
 	struct mdss_panel_debugfs_info *debugfs_info;
 	debugfs_info = kzalloc(sizeof(*debugfs_info), GFP_KERNEL);
-	if (!debugfs_info)
+	if (!debugfs_info) {
+		pr_err("No memory to create panel debugfs info");
 		return -ENOMEM;
+	}
 
 	debugfs_info->parent = parent;
 	debugfs_info->root = debugfs_create_dir(intf_str, parent);
@@ -628,7 +630,6 @@ void mdss_panel_info_from_timing(struct mdss_panel_timing *pt,
 
 	pinfo->yres = pt->yres;
 	pinfo->lcdc.v_front_porch = pt->v_front_porch;
-	pinfo->lcdc.v_front_porch_fixed = pt->v_front_porch;
 	pinfo->lcdc.v_back_porch = pt->v_back_porch;
 	pinfo->lcdc.v_pulse_width = pt->v_pulse_width;
 
@@ -980,3 +981,5 @@ int mdss_panel_dsc_prepare_pps_buf(struct dsc_desc *dsc, char *buf,
 
 	return DSC_PPS_LEN;	/* 128 */
 }
+
+

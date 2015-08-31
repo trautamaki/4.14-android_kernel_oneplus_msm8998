@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -494,6 +494,8 @@ static int pp_gamut_cache_params_v1_7(struct mdp_gamut_cfg_data *config,
 		tbl_gamut = vmalloc(GAMUT_TOTAL_TABLE_SIZE_V1_7 *
 				    sizeof(u32));
 	if (!tbl_gamut) {
+		pr_err("failed to allocate buffer for gamut size %zd",
+			(GAMUT_TOTAL_TABLE_SIZE_V1_7 * sizeof(u32)));
 		ret = -ENOMEM;
 		goto gamut_config_exit;
 	}
@@ -679,8 +681,16 @@ static int pp_pcc_cache_params_v1_7(struct mdp_pcc_cfg_data *config,
 		if (copy_from_user(&v17_usr_config, config->cfg_payload,
 				   sizeof(v17_usr_config))) {
 			pr_err("failed to copy v17 pcc\n");
-			ret = -EFAULT;
-			goto pcc_config_exit;
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+			if (config->cfg_payload != NULL)
+				memcpy(&v17_usr_config, config->cfg_payload,
+					sizeof(struct mdp_pcc_data_v1_7));
+			else
+#endif
+			{
+				ret = -EFAULT;
+				goto pcc_config_exit;
+			}
 		}
 		if ((config->ops & MDP_PP_OPS_DISABLE)) {
 			pr_debug("disable pcc\n");
@@ -1192,9 +1202,17 @@ static int pp_pa_cache_params_v1_7(struct mdp_pa_v2_cfg_data *config,
 
 	if (copy_from_user(&pa_usr_config, config->cfg_payload,
 			   sizeof(pa_usr_config))) {
-		pr_err("Failed to copy v1_7 PA\n");
-		ret = -EFAULT;
-		goto pa_config_exit;
+#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
+		if (config->cfg_payload != NULL)
+			memcpy(&pa_usr_config, config->cfg_payload,
+				sizeof(struct mdp_pa_data_v1_7));
+		else
+#endif
+		{
+			pr_err("Failed to copy v1_7 PA\n");
+			ret = -EFAULT;
+			goto pa_config_exit;
+		}
 	}
 
 	if ((config->flags & MDP_PP_OPS_DISABLE)) {
@@ -1294,6 +1312,7 @@ static int pp_pa_cache_params_pipe_v1_7(struct mdp_pa_v2_cfg_data *config,
 		pa_cache_data = kzalloc(sizeof(struct mdp_pa_data_v1_7),
 					GFP_KERNEL);
 		if (!pa_cache_data) {
+			pr_err("failed to allocate cache_data\n");
 			ret = -ENOMEM;
 			goto pa_cache_pipe_exit;
 		} else
@@ -1745,7 +1764,7 @@ static int pp_igc_lut_cache_params_pipe_v3(
 		u32 copy_from_kernel)
 {
 	struct mdp_igc_lut_data_config *v3_cache_data = NULL;
-	struct mdp_igc_lut_data_payload v3_usr_config;
+	struct mdp_igc_lut_data_payload v3_usr_config = { 0 };
 	u32 *c0_c1_data, *c2_data, len;
 	int ret = 0, fix_up = 0, i = 0;
 	u32 table_fmt = mdp_igc_rec_max, strength = 0;

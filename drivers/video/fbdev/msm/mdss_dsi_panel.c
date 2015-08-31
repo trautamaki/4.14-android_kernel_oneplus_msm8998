@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,14 +15,11 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
+#include <linux/qpnp/pin.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#ifndef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
 #include <linux/leds.h>
-#else
-#include <linux/backlight.h>
-#endif
-#include <linux/pwm.h>
+#include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
 
@@ -34,9 +31,8 @@
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
-#ifndef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
+
 DEFINE_LED_TRIGGER(bl_led_trigger);
-#endif
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -81,10 +77,10 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 
 	if (level == 0) {
 		if (ctrl->pwm_enabled) {
-			ret = pwm_config(ctrl->pwm_bl, 0,
-				ctrl->pwm_period * NSEC_PER_USEC);
+			ret = pwm_config_us(ctrl->pwm_bl, level,
+					ctrl->pwm_period);
 			if (ret)
-				pr_err("%s: pwm_config() failed err=%d.\n",
+				pr_err("%s: pwm_config_us() failed err=%d.\n",
 						__func__, ret);
 			pwm_disable(ctrl->pwm_bl);
 		}
@@ -103,10 +99,9 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 					ctrl->ndx, level, duty);
 
 	if (ctrl->pwm_period >= USEC_PER_SEC) {
-
-		ret = pwm_config(ctrl->pwm_bl, duty, ctrl->pwm_period);
+		ret = pwm_config_us(ctrl->pwm_bl, duty, ctrl->pwm_period);
 		if (ret) {
-			pr_err("%s: pwm_config() failed err=%d.\n",
+			pr_err("%s: pwm_config_us() failed err=%d.\n",
 					__func__, ret);
 			return;
 		}
@@ -251,55 +246,6 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
-							bool enable)
-{
-	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-
-	if (pdata == NULL) {
-		pr_err("%s: Invalid input data\n", __func__);
-		return;
-	}
-
-	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-						panel_data);
-
-	pr_debug("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
-
-	if (ctrl->idle == enable)
-		return;
-
-	if (enable) {
-		if (ctrl->idle_on_cmds.cmd_cnt) {
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
-					CMD_REQ_COMMIT);
-			ctrl->idle = true;
-			pr_debug("Idle on\n");
-		}
-	} else {
-		if (ctrl->idle_off_cmds.cmd_cnt) {
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
-					CMD_REQ_COMMIT);
-			ctrl->idle = false;
-			pr_debug("Idle off\n");
-		}
-	}
-}
-
-static bool mdss_dsi_panel_get_idle_mode(struct mdss_panel_data *pdata)
-
-{
-	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-
-	if (pdata == NULL) {
-		pr_err("%s: Invalid input data\n", __func__);
-		return 0;
-	}
-	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-						panel_data);
-	return ctrl->idle;
-}
-
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
@@ -387,7 +333,7 @@ int mdss_dsi_bl_gpio_ctrl(struct mdss_panel_data *pdata, int enable)
 
 		if (ctrl_pdata->bklt_en_gpio_invert)
 			val = 0;
-		else
+		 else
 			val = 1;
 
 		rc = gpio_direction_output(ctrl_pdata->bklt_en_gpio, val);
@@ -405,7 +351,7 @@ int mdss_dsi_bl_gpio_ctrl(struct mdss_panel_data *pdata, int enable)
 		 */
 		if (ctrl_pdata->bklt_en_gpio_invert)
 			val = 1;
-		else
+		 else
 			val = 0;
 
 		rc = gpio_direction_output(ctrl_pdata->bklt_en_gpio, val);
@@ -460,11 +406,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return rc;
 	}
 
-	if (pinfo->skip_panel_reset && !pinfo->cont_splash_enabled) {
-		pr_debug("%s: skip_panel_reset is set\n", __func__);
-		return 0;
-	}
-
 	pr_debug("%s: enable = %d\n", __func__, enable);
 
 	if (enable) {
@@ -498,8 +439,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
 				if (pdata->panel_info.rst_seq[++i])
-					usleep_range(pinfo->rst_seq[i] * 1000,
-						pinfo->rst_seq[i] * 1000);
+					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
 			}
 
 			if (gpio_is_valid(ctrl_pdata->avdd_en_gpio)) {
@@ -939,11 +879,7 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
-#ifndef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
 		led_trigger_event(bl_led_trigger, bl_level);
-#else
-		backlight_device_set_brightness(ctrl_pdata->raw_bd, bl_level);
-#endif
 		break;
 	case BL_PWM:
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
@@ -1047,7 +983,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 
 	pinfo = &pdata->panel_info;
 	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
-		goto end;
+			goto end;
 
 	cmds = &ctrl->post_panel_on_cmds;
 	if (cmds->cmd_cnt) {
@@ -1063,8 +999,6 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	}
 
 end:
-	/* clear idle state */
-	ctrl->idle = false;
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }
@@ -1122,11 +1056,7 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 		enable);
 
 	/* Any panel specific low power commands/config */
-	/* Control idle mode for panel */
-	if (enable)
-		mdss_dsi_panel_set_idle_mode(pdata, true);
-	else
-		mdss_dsi_panel_set_idle_mode(pdata, false);
+
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }
@@ -1873,13 +1803,17 @@ static bool mdss_dsi_cmp_panel_reg_v2(struct mdss_dsi_ctrl_pdata *ctrl)
 	for (i = 0; i < ctrl->status_cmds.cmd_cnt; i++)
 		len += lenp[i];
 
+	for (i = 0; i < len; i++) {
+		pr_debug("[%i] return:0x%x status:0x%x\n",
+			i, (unsigned int)ctrl->return_buf[i],
+			(unsigned int)ctrl->status_value[j + i]);
+		MDSS_XLOG(ctrl->ndx, ctrl->return_buf[i],
+			ctrl->status_value[j + i]);
+		j += len;
+	}
+
 	for (j = 0; j < ctrl->groups; ++j) {
 		for (i = 0; i < len; ++i) {
-			pr_debug("[%i] return:0x%x status:0x%x\n",
-				i, ctrl->return_buf[i],
-				(unsigned int)ctrl->status_value[group + i]);
-			MDSS_XLOG(ctrl->ndx, ctrl->return_buf[i],
-					ctrl->status_value[group + i]);
 			if (ctrl->return_buf[i] !=
 				ctrl->status_value[group + i])
 				break;
@@ -2321,8 +2255,10 @@ static void mdss_dsi_parse_panel_horizintal_line_idle(struct device_node *np,
 	cnt = len / sizeof(u32);
 
 	kp = kzalloc(sizeof(*kp) * (cnt / 3), GFP_KERNEL);
-	if (kp == NULL)
+	if (kp == NULL) {
+		pr_err("%s: No memory\n", __func__);
 		return;
+	}
 
 	ctrl->line_idle = kp;
 	for (i = 0; i < cnt; i += 3) {
@@ -2388,15 +2324,14 @@ static void mdss_dsi_parse_dfps_config(struct device_node *pan_node,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	const char *data;
-	bool dynamic_fps, dynamic_bitclk;
+	bool dynamic_fps;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
-	int rc = 0;
 
 	dynamic_fps = of_property_read_bool(pan_node,
 			"qcom,mdss-dsi-pan-enable-dynamic-fps");
 
 	if (!dynamic_fps)
-		goto dynamic_bitclk;
+		return;
 
 	pinfo->dynamic_fps = true;
 	data = of_get_property(pan_node, "qcom,mdss-dsi-pan-fps-update", NULL);
@@ -2426,49 +2361,8 @@ static void mdss_dsi_parse_dfps_config(struct device_node *pan_node,
 	pinfo->new_fps = pinfo->mipi.frame_rate;
 	pinfo->current_fps = pinfo->mipi.frame_rate;
 
-dynamic_bitclk:
-	dynamic_bitclk = of_property_read_bool(pan_node,
-			"qcom,mdss-dsi-pan-enable-dynamic-bitclk");
-	if (!dynamic_bitclk)
-		return;
-
-	of_find_property(pan_node, "qcom,mdss-dsi-dynamic-bitclk_freq",
-		&pinfo->supp_bitclk_len);
-	pinfo->supp_bitclk_len = pinfo->supp_bitclk_len/sizeof(u32);
-	if (pinfo->supp_bitclk_len < 1)
-		return;
-
-	pinfo->supp_bitclks = kzalloc((sizeof(u32) * pinfo->supp_bitclk_len),
-		GFP_KERNEL);
-	if (!pinfo->supp_bitclks)
-		return;
-
-	rc = of_property_read_u32_array(pan_node,
-		"qcom,mdss-dsi-dynamic-bitclk_freq", pinfo->supp_bitclks,
-		pinfo->supp_bitclk_len);
-	if (rc) {
-		pr_err("Error from dynamic bitclk freq u64 array read\n");
-		return;
-	}
-	pinfo->dynamic_bitclk = true;
 	return;
 }
-
-#ifdef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
-static int dsi_panel_wled_register(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	int rc = 0;
-	struct backlight_device *bd;
-
-	bd = backlight_device_get_by_type(BACKLIGHT_RAW);
-	if (!bd) {
-		pr_err("fail raw backlight register\n");
-		rc = -EINVAL;
-	}
-	ctrl_pdata->raw_bd = bd;
-	return rc;
-}
-#endif
 
 int mdss_panel_parse_bl_settings(struct device_node *np,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -2481,14 +2375,8 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 	data = of_get_property(np, "qcom,mdss-dsi-bl-pmic-control-type", NULL);
 	if (data) {
 		if (!strcmp(data, "bl_ctrl_wled")) {
-#ifndef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
 			led_trigger_register_simple("bkl-trigger",
 				&bl_led_trigger);
-#else
-			rc = dsi_panel_wled_register(ctrl_pdata);
-			if (rc)
-				return rc;
-#endif
 			pr_debug("%s: SUCCESS-> WLED TRIGGER register\n",
 				__func__);
 			ctrl_pdata->bklt_ctrl = BL_WLED;
@@ -2575,9 +2463,6 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 	for (i = 0; i < ARRAY_SIZE(pt->phy_timing_8996); i++)
 		pinfo->mipi.dsi_phy_db.timing_8996[i] = pt->phy_timing_8996[i];
 
-	for (i = 0; i < ARRAY_SIZE(pt->phy_timing_12nm); i++)
-		pinfo->mipi.dsi_phy_db.timing_12nm[i] = pt->phy_timing_12nm[i];
-
 	ctrl->on_cmds = pt->on_cmds;
 	ctrl->post_panel_on_cmds = pt->post_panel_on_cmds;
 
@@ -2589,13 +2474,12 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 	return 0;
 }
 
-#ifndef CONFIG_BACKLIGHT_QCOM_SPMI_WLED
 void mdss_dsi_unregister_bl_settings(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	if (ctrl_pdata->bklt_ctrl == BL_WLED)
 		led_trigger_unregister_simple(bl_led_trigger);
 }
-#endif
+
 static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
 		struct dsi_panel_timing *pt,
 		struct mdss_panel_data *panel_data)
@@ -2691,18 +2575,6 @@ static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
 			pt->phy_timing_8996[i] = data[i];
 		phy_timings_present = true;
 	}
-
-	data = of_get_property(np,
-		"qcom,mdss-dsi-panel-timings-phy-12nm", &len);
-	if ((!data) || (len != 8)) {
-		pr_debug("%s:%d, Unable to read 12nm Phy lane timing settings",
-		       __func__, __LINE__);
-	} else {
-		for (i = 0; i < len; i++)
-			pt->phy_timing_12nm[i] = data[i];
-		phy_timings_present = true;
-	}
-
 	if (!phy_timings_present) {
 		pr_err("%s: phy timing settings not present\n", __func__);
 		return -EINVAL;
@@ -2860,7 +2732,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->bpp = (!rc ? tmp : 24);
 	pinfo->mipi.mode = DSI_VIDEO_MODE;
 	data = of_get_property(np, "qcom,mdss-dsi-panel-type", NULL);
-	if (data && !strcmp(data, "dsi_cmd_mode"))
+	if (data && !strncmp(data, "dsi_cmd_mode", 12))
 		pinfo->mipi.mode = DSI_CMD_MODE;
 	pinfo->mipi.boot_mode = pinfo->mipi.mode;
 	tmp = 0;
@@ -3044,25 +2916,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
-	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_on_cmds,
-		"qcom,mdss-dsi-idle-on-command",
-		"qcom,mdss-dsi-idle-on-command-state");
-
-	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
-		"qcom,mdss-dsi-idle-off-command",
-		"qcom,mdss-dsi-idle-off-command-state");
-
-	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
-	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
-
 	rc = of_property_read_u32(np, "qcom,adjust-timer-wakeup-ms", &tmp);
 	pinfo->adjust_timer_delay_ms = (!rc ? tmp : 0);
 
 	pinfo->mipi.force_clk_lane_hs = of_property_read_bool(np,
 		"qcom,mdss-dsi-force-clock-lane-hs");
-
-	pinfo->skip_panel_reset =
-		of_property_read_bool(np, "qcom,mdss-skip-panel-reset");
 
 	rc = mdss_dsi_parse_panel_features(np, ctrl_pdata);
 	if (rc) {
@@ -3149,6 +3007,6 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.apply_display_setting =
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
-	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
 	return 0;
 }
