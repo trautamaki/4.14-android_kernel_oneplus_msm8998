@@ -44,6 +44,12 @@ First Level Node - LCDB module
 	Value type: <u32>
 	Definition:  Required to control the LDO power down delay.
 		     Possible values are 0, 1, 4, 8.
+- qcom,force-module-reenable
+	Usage:      required if using SW mode for module enable
+	Value type:  <bool>
+	Definition: This enables the workaround to force enable
+		    the vph_pwr_2p5_ok signal required for
+		    turning on the LCDB module.
 
 Touch-to-wake (TTW) properties:
 
