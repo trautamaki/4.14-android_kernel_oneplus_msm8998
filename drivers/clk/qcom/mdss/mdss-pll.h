@@ -43,6 +43,7 @@
 #define upper_8_bit(x) ((((x) >> 2) & 0x100) >> 8)
 
 enum {
+	MDSS_DSI_PLL_8974,
 	MDSS_DSI_PLL_10NM,
 	MDSS_DP_PLL_10NM,
 	MDSS_DSI_PLL_7NM,
@@ -57,6 +58,7 @@ enum {
 };
 
 enum {
+	MDSS_PLL_TARGET_8976,
 	MDSS_PLL_TARGET_8996,
 	MDSS_PLL_TARGET_SDM660,
 };
