@@ -154,6 +154,7 @@ static int clk_cbcr_set_flags(struct regmap *regmap, unsigned int reg,
 	u32 cbcr_val = 0;
 	u32 cbcr_mask;
 	int ret;
+	int delay_us = 1;
 
 	switch (flags) {
 	case CLKFLAG_PERIPH_OFF_SET:
@@ -173,6 +174,7 @@ static int clk_cbcr_set_flags(struct regmap *regmap, unsigned int reg,
 		break;
 	case CLKFLAG_NORETAIN_MEM:
 		cbcr_mask = BIT(14);
+		delay_us = 0;
 		break;
 	default:
 		return -EINVAL;
@@ -184,7 +186,7 @@ static int clk_cbcr_set_flags(struct regmap *regmap, unsigned int reg,
 
 	/* Make sure power is enabled/disabled before returning. */
 	mb();
-	udelay(1);
+	udelay(delay_us);
 
 	return 0;
 }
