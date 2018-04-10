@@ -1098,6 +1098,8 @@ const char * const vmstat_text[] = {
 	"nr_unreclaimable_pages",
 	"nr_ion_heap",
 	"nr_ion_heap_pool",
+	"nr_indirectly_reclaimable",
+
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
 	"nr_dirty_background_threshold",
