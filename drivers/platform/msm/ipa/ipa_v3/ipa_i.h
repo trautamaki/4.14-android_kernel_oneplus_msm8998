@@ -2860,6 +2860,7 @@ int ipa3_disconn_qdss_pipes(void);
 #else
 #define IPA_DUMP_BUFF(base, phy_base, size)
 #endif
+int ipa3_cfg_clkon_cfg(struct ipahal_reg_clkon_cfg *clkon_cfg);
 int ipa3_init_mem_partition(enum ipa_hw_type ipa_hw_type);
 int ipa3_controller_static_bind(struct ipa3_controller *controller,
 		enum ipa_hw_type ipa_hw_type);
