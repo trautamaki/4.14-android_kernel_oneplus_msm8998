@@ -1451,7 +1451,9 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 				| UFSHCD_QUIRK_BROKEN_PA_RXHSUNTERMCAP);
 	}
 
+#ifndef CONFIG_ARCH_SONY_YOSHINO
 	if (host->disable_lpm)
+#endif
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
 	/*
 	 * Inline crypto is currently broken with ufs-qcom at least because the
