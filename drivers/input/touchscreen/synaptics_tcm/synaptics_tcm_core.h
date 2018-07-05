@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,26 +41,27 @@
 #include <linux/input.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 #include <linux/input/synaptics_tcm.h>
-#ifdef CONFIG_DRM
-#include <linux/msm_drm_notify.h>
-#elif CONFIG_FB
+#ifdef CONFIG_FB
 #include <linux/fb.h>
 #include <linux/notifier.h>
 #endif
-#include <uapi/linux/sched/types.h>
+#ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
+#include <linux/drm_notify.h>
+#endif
+
+//#define RESET_ON_RESUME
 
 #define SYNAPTICS_TCM_ID_PRODUCT (1 << 0)
-#define SYNAPTICS_TCM_ID_VERSION 0x0101
-#define SYNAPTICS_TCM_ID_SUBVERSION 0
+#define SYNAPTICS_TCM_ID_VERSION_MAJOR 0x0108
+#define SYNAPTICS_TCM_ID_VERSION_MINOR 0x0002
 
 #define PLATFORM_DRIVER_NAME "synaptics_tcm"
 
 #define TOUCH_INPUT_NAME "synaptics_tcm_touch"
 #define TOUCH_INPUT_PHYS_PATH "synaptics_tcm/touch_input"
 
-/* #define WAKEUP_GESTURE */
+//#define WAKEUP_GESTURE
 
 #define RD_CHUNK_SIZE 0 /* read length limit in bytes, 0 = unlimited */
 #define WR_CHUNK_SIZE 0 /* write length limit in bytes, 0 = unlimited */
@@ -117,18 +120,18 @@ static ssize_t CONCAT(m_name##_sysfs, _##a_name##_show)(struct device *dev, \
 		struct device_attribute *attr, char *buf); \
 \
 static struct device_attribute dev_attr_##a_name = \
-		__ATTR(a_name, 0444, \
+		__ATTR(a_name, S_IRUGO, \
 		CONCAT(m_name##_sysfs, _##a_name##_show), \
-		syna_tcm_store_error)
+		syna_tcm_store_error);
 
 #define STORE_PROTOTYPE(m_name, a_name) \
 static ssize_t CONCAT(m_name##_sysfs, _##a_name##_store)(struct device *dev, \
 		struct device_attribute *attr, const char *buf, size_t count); \
 \
 static struct device_attribute dev_attr_##a_name = \
-		__ATTR(a_name, 0220, \
+		__ATTR(a_name, (S_IWUSR | S_IWGRP), \
 		syna_tcm_show_error, \
-		CONCAT(m_name##_sysfs, _##a_name##_store))
+		CONCAT(m_name##_sysfs, _##a_name##_store));
 
 #define SHOW_STORE_PROTOTYPE(m_name, a_name) \
 static ssize_t CONCAT(m_name##_sysfs, _##a_name##_show)(struct device *dev, \
@@ -138,15 +141,11 @@ static ssize_t CONCAT(m_name##_sysfs, _##a_name##_store)(struct device *dev, \
 		struct device_attribute *attr, const char *buf, size_t count); \
 \
 static struct device_attribute dev_attr_##a_name = \
-		__ATTR(a_name, 0664, \
+		__ATTR(a_name, (S_IRUGO | S_IWUSR | S_IWGRP), \
 		CONCAT(m_name##_sysfs, _##a_name##_show), \
-		CONCAT(m_name##_sysfs, _##a_name##_store))
+		CONCAT(m_name##_sysfs, _##a_name##_store));
 
 #define ATTRIFY(a_name) (&dev_attr_##a_name)
-
-#define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
-#define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
-#define PINCTRL_STATE_RELEASE   "pmx_ts_release"
 
 enum module_type {
 	TCM_TOUCH = 0,
@@ -164,7 +163,6 @@ enum boot_mode {
 	MODE_HOST_DOWNLOAD = 0x02,
 	MODE_BOOTLOADER = 0x0b,
 	MODE_TDDI_BOOTLOADER = 0x0c,
-	MODE_PRODUCTION_TEST = 0x0e,
 };
 
 enum boot_status {
@@ -186,7 +184,6 @@ enum app_status {
 enum firmware_mode {
 	FW_MODE_BOOTLOADER = 0,
 	FW_MODE_APPLICATION = 1,
-	FW_MODE_PRODUCTION_TEST = 2,
 };
 
 enum dynamic_config_id {
@@ -204,6 +201,12 @@ enum dynamic_config_id {
 	DC_GRIP_SUPPRESSION_ENABLED,
 	DC_ENABLE_THICK_GLOVE,
 	DC_ENABLE_GLOVE,
+	DC_ENABLE_ALTERNATIVE_REPORT_RATE = 0xC0,
+	DC_CLOSED_COVER_MODE_ENABLE = 0xC4,
+	DC_CLOSED_COVER_X_MIN = 0xC5,
+	DC_CLOSED_COVER_X_MAX = 0xC6,
+	DC_CLOSED_COVER_Y_MIN = 0xC7,
+	DC_CLOSED_COVER_Y_MAX = 0xC8,
 };
 
 enum command {
@@ -237,9 +240,8 @@ enum command {
 	CMD_EXIT_DEEP_SLEEP = 0x2d,
 	CMD_GET_TOUCH_INFO = 0x2e,
 	CMD_GET_DATA_LOCATION = 0x2f,
-	CMD_DOWNLOAD_CONFIG = 0x30,
-	CMD_ENTER_PRODUCTION_TEST_MODE = 0x31,
-	CMD_GET_FEATURES = 0x32,
+	CMD_DOWNLOAD_CONFIG = 0xc0,
+	CMD_GET_POWER_MODE = 0xc2,
 };
 
 enum status_code {
@@ -247,7 +249,6 @@ enum status_code {
 	STATUS_OK = 0x01,
 	STATUS_BUSY = 0x02,
 	STATUS_CONTINUED_READ = 0x03,
-	STATUS_NOT_EXECUTED_IN_DEEP_SLEEP = 0x0b,
 	STATUS_RECEIVE_BUFFER_OVERFLOW = 0x0c,
 	STATUS_PREVIOUS_COMMAND_PENDING = 0x0d,
 	STATUS_NOT_IMPLEMENTED = 0x0e,
@@ -260,8 +261,8 @@ enum report_type {
 	REPORT_TOUCH = 0x11,
 	REPORT_DELTA = 0x12,
 	REPORT_RAW = 0x13,
-	REPORT_STATUS = 0x1b,
 	REPORT_PRINTF = 0x82,
+	REPORT_STATUS = 0xc0,
 	REPORT_HDL = 0xfe,
 };
 
@@ -380,32 +381,24 @@ struct syna_tcm_message_header {
 	unsigned char length[2];
 };
 
-struct syna_tcm_features {
-	unsigned char byte_0_reserved;
-	unsigned char byte_1_reserved;
-	unsigned char dual_firmware:1;
-	unsigned char byte_2_reserved:7;
-} __packed;
-
 struct syna_tcm_hcd {
 	pid_t isr_pid;
 	atomic_t command_status;
-	atomic_t host_downloading;
-	atomic_t firmware_flashing;
-	wait_queue_head_t hdl_wq;
-	wait_queue_head_t reflash_wq;
+	wait_queue_head_t wait_queue;
 	int irq;
 	bool init_okay;
 	bool do_polling;
 	bool in_suspend;
 	bool irq_enabled;
-	bool host_download_mode;
-	unsigned char marker;
+	bool dispatch_report;
+	bool glove_enabled;
+	bool cover_mode_enabled;
+	bool cover_status;
+	bool stamina;
 	unsigned char fb_ready;
 	unsigned char command;
 	unsigned char async_report_id;
 	unsigned char status_report_code;
-	unsigned char response_code;
 	unsigned int read_length;
 	unsigned int payload_length;
 	unsigned int packrat_number;
@@ -427,12 +420,15 @@ struct syna_tcm_hcd {
 	struct delayed_work polling_work;
 	struct workqueue_struct *polling_workqueue;
 	struct task_struct *notifier_thread;
-	struct pinctrl *ts_pinctrl;
-	struct pinctrl_state *pinctrl_state_active;
-	struct pinctrl_state *pinctrl_state_suspend;
-	struct pinctrl_state *pinctrl_state_release;
-#if defined(CONFIG_DRM) || defined(CONFIG_FB)
+#if defined(CONFIG_FB) && !defined(CONFIG_DRM_SDE_SPECIFIC_PANEL)
 	struct notifier_block fb_notifier;
+#endif
+#ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
+	struct notifier_block drm_notifier;
+#endif
+#ifndef RESET_ON_RESUME
+	struct work_struct resume_work;
+	struct workqueue_struct *resume_workqueue;
 #endif
 	struct syna_tcm_buffer in;
 	struct syna_tcm_buffer out;
@@ -446,9 +442,8 @@ struct syna_tcm_hcd {
 	struct syna_tcm_identification id_info;
 	struct syna_tcm_helper helper;
 	struct syna_tcm_watchdog watchdog;
-	struct syna_tcm_features features;
 	const struct syna_tcm_hw_interface *hw_if;
-	int (*reset)(struct syna_tcm_hcd *tcm_hcd, bool hw, bool update_wd);
+	int (*reset)(struct syna_tcm_hcd *tcm_hcd, bool hw, bool from_watchdog);
 	int (*sleep)(struct syna_tcm_hcd *tcm_hcd, bool en);
 	int (*identify)(struct syna_tcm_hcd *tcm_hcd, bool id);
 	int (*enable_irq)(struct syna_tcm_hcd *tcm_hcd, bool en, bool ns);
@@ -460,7 +455,6 @@ struct syna_tcm_hcd {
 			unsigned char command, unsigned char *payload,
 			unsigned int length, unsigned char **resp_buf,
 			unsigned int *resp_buf_size, unsigned int *resp_length,
-			unsigned char *response_code,
 			unsigned int polling_delay_ms);
 	int (*get_dynamic_config)(struct syna_tcm_hcd *tcm_hcd,
 			enum dynamic_config_id id, unsigned short *value);
@@ -484,7 +478,6 @@ struct syna_tcm_module_cb {
 	int (*reset)(struct syna_tcm_hcd *tcm_hcd);
 	int (*suspend)(struct syna_tcm_hcd *tcm_hcd);
 	int (*resume)(struct syna_tcm_hcd *tcm_hcd);
-	int (*early_suspend)(struct syna_tcm_hcd *tcm_hcd);
 };
 
 struct syna_tcm_module_handler {
@@ -497,7 +490,6 @@ struct syna_tcm_module_handler {
 struct syna_tcm_module_pool {
 	bool initialized;
 	bool queue_work;
-	bool reconstructing;
 	struct mutex mutex;
 	struct list_head list;
 	struct work_struct work;
@@ -669,8 +661,7 @@ static inline unsigned int le4_to_uint(const unsigned char *src)
 			(unsigned int)src[3] * 0x1000000;
 }
 
-static inline unsigned int ceil_div(unsigned int dividend,
-		unsigned int divisor)
+static inline unsigned int ceil_div(unsigned int dividend, unsigned divisor)
 {
 	return (dividend + divisor - 1) / divisor;
 }

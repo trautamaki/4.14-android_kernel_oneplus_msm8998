@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +32,14 @@
  * DOLLARS.
  */
 
-#include <linux/sched/signal.h>
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/input.h>
+#include <linux/platform_device.h>
+#include <linux/input/synaptics_tcm.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include "synaptics_tcm_core.h"
 
 #define SYSFS_DIR_NAME "diagnostics"
@@ -56,13 +65,13 @@ DECLARE_COMPLETION(diag_remove_complete);
 
 static struct diag_hcd *diag_hcd;
 
-STORE_PROTOTYPE(diag, pid);
-SHOW_PROTOTYPE(diag, size);
-STORE_PROTOTYPE(diag, type);
-SHOW_PROTOTYPE(diag, rows);
-SHOW_PROTOTYPE(diag, cols);
-SHOW_PROTOTYPE(diag, hybrid);
-SHOW_PROTOTYPE(diag, buttons);
+STORE_PROTOTYPE(diag, pid)
+SHOW_PROTOTYPE(diag, size)
+STORE_PROTOTYPE(diag, type)
+SHOW_PROTOTYPE(diag, rows)
+SHOW_PROTOTYPE(diag, cols)
+SHOW_PROTOTYPE(diag, hybrid)
+SHOW_PROTOTYPE(diag, buttons)
 
 static struct device_attribute *attrs[] = {
 	ATTRIFY(pid),
@@ -81,7 +90,7 @@ static ssize_t diag_sysfs_data_show(struct file *data_file,
 static struct bin_attribute bin_attr = {
 	.attr = {
 		.name = "data",
-		.mode = 0444,
+		.mode = S_IRUGO,
 	},
 	.size = 0,
 	.read = diag_sysfs_data_show,
@@ -94,7 +103,7 @@ static ssize_t diag_sysfs_pid_store(struct device *dev,
 	unsigned int input;
 	struct syna_tcm_hcd *tcm_hcd = diag_hcd->tcm_hcd;
 
-	if (kstrtouint(buf, 10, &input))
+	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
 	mutex_lock(&tcm_hcd->extif_mutex);
@@ -157,7 +166,7 @@ static ssize_t diag_sysfs_type_store(struct device *dev,
 	unsigned int input;
 	struct syna_tcm_hcd *tcm_hcd = diag_hcd->tcm_hcd;
 
-	if (kstrtouint(buf, 10, &input))
+	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
 	mutex_lock(&tcm_hcd->extif_mutex);
@@ -356,7 +365,7 @@ static void diag_report(void)
 				tcm_hcd->report.buffer.data_length);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for ping.buf\n");
+					"Failed to allocate memory for diag_hcd->ping.buf\n");
 			UNLOCK_BUFFER(diag_hcd->ping);
 			return;
 		}
@@ -387,7 +396,7 @@ static void diag_report(void)
 				tcm_hcd->report.buffer.data_length);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for pong.buf\n");
+					"Failed to allocate memory for diag_hcd->pong.buf\n");
 			UNLOCK_BUFFER(diag_hcd->pong);
 			return;
 		}
@@ -414,11 +423,13 @@ static void diag_report(void)
 
 	if (diag_hcd->pid)
 		send_sig_info(SIGIO, &diag_hcd->sigio, diag_hcd->task);
+
+	return;
 }
 
 static int diag_init(struct syna_tcm_hcd *tcm_hcd)
 {
-	int retval;
+	int retval = 0;
 	int idx;
 
 	diag_hcd = kzalloc(sizeof(*diag_hcd), GFP_KERNEL);
@@ -443,7 +454,6 @@ static int diag_init(struct syna_tcm_hcd *tcm_hcd)
 	if (!diag_hcd->sysfs_dir) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to create sysfs directory\n");
-		retval = -EINVAL;
 		goto err_sysfs_create_dir;
 	}
 
@@ -541,7 +551,6 @@ static struct syna_tcm_module_cb diag_module = {
 	.reset = diag_reset,
 	.suspend = NULL,
 	.resume = NULL,
-	.early_suspend = NULL,
 };
 
 static int __init diag_module_init(void)
@@ -554,6 +563,8 @@ static void __exit diag_module_exit(void)
 	syna_tcm_add_module(&diag_module, false);
 
 	wait_for_completion(&diag_remove_complete);
+
+	return;
 }
 
 module_init(diag_module_init);

@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,10 +32,26 @@
  * DOLLARS.
  */
 
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/input.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include <linux/i2c.h>
+
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/delay.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include <linux/of_gpio.h>
+
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/platform_device.h>
+#include <linux/input/synaptics_tcm.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include "synaptics_tcm_core.h"
-#include "linux/moduleparam.h"
 
 #define XFER_ATTEMPTS 10
 
@@ -46,8 +64,6 @@ static struct syna_tcm_bus_io bus_io;
 static struct syna_tcm_hw_interface hw_if;
 
 static struct platform_device *syna_tcm_i2c_device;
-
-active_tp_setup(synaptics_tcm);
 
 #ifdef CONFIG_OF
 static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
@@ -98,10 +114,12 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,power-on-state",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Failed to read synaptics,power-on-state\n");
+			LOGE(dev,
+					"Failed to read synaptics,power-on-state property\n");
 			return retval;
+		} else {
+			bdata->power_on_state = value;
 		}
-		bdata->power_on_state = value;
 	} else {
 		bdata->power_on_state = 0;
 	}
@@ -111,10 +129,12 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,power-delay-ms",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Failed to read synaptics,power-delay-ms\n");
+			LOGE(dev,
+					"Failed to read synaptics,power-delay-ms property\n");
 			return retval;
+		} else {
+			bdata->power_delay_ms = value;
 		}
-		bdata->power_delay_ms = value;
 	} else {
 		bdata->power_delay_ms = 0;
 	}
@@ -132,10 +152,12 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,reset-on-state",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Failed to read synaptics,reset-on-state\n");
+			LOGE(dev,
+					"Failed to read synaptics,reset-on-state property\n");
 			return retval;
+		} else {
+			bdata->reset_on_state = value;
 		}
-		bdata->reset_on_state = value;
 	} else {
 		bdata->reset_on_state = 0;
 	}
@@ -145,10 +167,12 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,reset-active-ms",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Failed to read synaptics,reset-active-ms\n");
+			LOGE(dev,
+					"Failed to read synaptics,reset-active-ms property\n");
 			return retval;
+		} else {
+			bdata->reset_active_ms = value;
 		}
-		bdata->reset_active_ms = value;
 	} else {
 		bdata->reset_active_ms = 0;
 	}
@@ -158,10 +182,12 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,reset-delay-ms",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Unable to read synaptics,reset-delay-ms\n");
+			LOGE(dev,
+					"Unable to read synaptics,reset-delay-ms property\n");
 			return retval;
+		} else {
+			bdata->reset_delay_ms = value;
 		}
-		bdata->reset_delay_ms = value;
 	} else {
 		bdata->reset_delay_ms = 0;
 	}
@@ -180,16 +206,15 @@ static int parse_dt(struct device *dev, struct syna_tcm_board_data *bdata)
 		retval = of_property_read_u32(np, "synaptics,ubl-i2c-addr",
 				&value);
 		if (retval < 0) {
-			LOGE(dev, "Unable to read synaptics,ubl-i2c-addr\n");
+			LOGE(dev,
+					"Unable to read synaptics,ubl-i2c-addr property\n");
 			return retval;
+		} else {
+			bdata->ubl_i2c_addr = value;
 		}
-		bdata->ubl_i2c_addr = value;
 	} else {
 		bdata->ubl_i2c_addr = 0;
 	}
-
-	bdata->extend_report = of_property_read_bool(np,
-			"synaptics,extend_report");
 
 	return 0;
 }
@@ -245,11 +270,11 @@ static int syna_tcm_i2c_rmi_read(struct syna_tcm_hcd *tcm_hcd,
 			retval = length;
 			goto exit;
 		}
-
-		LOGD(&i2c->dev, "Transfer attempt %d times\n", attempt + 1);
+		LOGE(&i2c->dev,
+				"Transfer attempt %d failed\n",
+				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
-			LOGE(&i2c->dev, "Transfer failed\n");
 			retval = -EIO;
 			goto exit;
 		}
@@ -306,11 +331,11 @@ static int syna_tcm_i2c_rmi_write(struct syna_tcm_hcd *tcm_hcd,
 			retval = length;
 			goto exit;
 		}
-
-		LOGD(&i2c->dev, "Transfer attempt %d times\n", attempt + 1);
+		LOGE(&i2c->dev,
+				"Transfer attempt %d failed\n",
+				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
-			LOGE(&i2c->dev, "Transfer failed\n");
 			retval = -EIO;
 			goto exit;
 		}
@@ -344,11 +369,16 @@ static int syna_tcm_i2c_read(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 			retval = length;
 			goto exit;
 		}
-
-		LOGD(&i2c->dev, "Transfer attempt %d times\n", attempt + 1);
+		if (tcm_hcd->in_suspend) {
+			LOGE(&i2c->dev, "suspend\n");
+			retval = -EIO;
+			goto exit;
+		}
+		LOGE(&i2c->dev,
+				"Transfer attempt %d failed\n",
+				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
-			LOGE(&i2c->dev, "Transfer failed\n");
 			retval = -EIO;
 			goto exit;
 		}
@@ -382,11 +412,11 @@ static int syna_tcm_i2c_write(struct syna_tcm_hcd *tcm_hcd, unsigned char *data,
 			retval = length;
 			goto exit;
 		}
-
-		LOGD(&i2c->dev, "Transfer attempt %d times\n", attempt + 1);
+		LOGE(&i2c->dev,
+				"Transfer attempt %d failed\n",
+				attempt + 1);
 
 		if (attempt + 1 == XFER_ATTEMPTS) {
-			LOGE(&i2c->dev, "Transfer failed\n");
 			retval = -EIO;
 			goto exit;
 		}
@@ -404,11 +434,6 @@ static int syna_tcm_i2c_probe(struct i2c_client *i2c,
 		const struct i2c_device_id *dev_id)
 {
 	int retval;
-	struct device_node *dt = i2c->dev.of_node;
-
-	if (synaptics_tcm_check_assigned_tp(dt, "compatible",
-				"qcom,i2c-touch-active") < 0)
-		return -ENODEV;
 
 	syna_tcm_i2c_device = platform_device_alloc(PLATFORM_DRIVER_NAME, 0);
 	if (!syna_tcm_i2c_device) {
@@ -466,7 +491,7 @@ static const struct i2c_device_id syna_tcm_id_table[] = {
 MODULE_DEVICE_TABLE(i2c, syna_tcm_id_table);
 
 #ifdef CONFIG_OF
-static const struct of_device_id syna_tcm_of_match_table[] = {
+static struct of_device_id syna_tcm_of_match_table[] = {
 	{
 		.compatible = "synaptics,tcm-i2c",
 	},
@@ -499,6 +524,8 @@ void syna_tcm_bus_exit(void)
 	kfree(buf);
 
 	i2c_del_driver(&syna_tcm_i2c_driver);
+
+	return;
 }
 EXPORT_SYMBOL(syna_tcm_bus_exit);
 

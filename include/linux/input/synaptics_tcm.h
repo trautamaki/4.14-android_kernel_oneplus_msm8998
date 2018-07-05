@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,12 +31,22 @@
  * TOTAL CUMULATIVE LIABILITY TO ANY PARTY SHALL NOT EXCEED ONE HUNDRED U.S.
  * DOLLARS.
  */
+/*
+ * Copyright (C) 2017 Sony Mobile Communications Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2, as
+ * published by the Free Software Foundation.
+ */
 
 #ifndef _SYNAPTICS_TCM_H_
 #define _SYNAPTICS_TCM_H_
 
 #define I2C_MODULE_NAME "synaptics_tcm_i2c"
 #define SPI_MODULE_NAME "synaptics_tcm_spi"
+
+/* Somc bringup Trigger */
+#define SOMC_TOUCH_BRINGUP
 
 struct syna_tcm_board_data {
 	bool x_flip;
@@ -58,7 +70,6 @@ struct syna_tcm_board_data {
 	unsigned long irq_flags;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
-	bool extend_report;
 };
 
 #endif
