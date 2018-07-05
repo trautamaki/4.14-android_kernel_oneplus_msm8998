@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,10 +33,20 @@
  */
 
 #include <linux/gpio.h>
+
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/input.h>
+#include <linux/platform_device.h>
+#include <linux/input/synaptics_tcm.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include "synaptics_tcm_core.h"
-#include "synaptics_tcm_testing.h"
 
 #define SYSFS_DIR_NAME "testing"
+
+#define NOISE_DELTA_FRAMES 20
 
 #define REPORT_TIMEOUT_MS 500
 
@@ -64,18 +76,20 @@ exit: \
 	return retval; \
 }
 
+DECLARE_COMPLETION(report_complete);
+
+DECLARE_COMPLETION(testing_remove_complete);
+
 enum test_code {
 	TEST_TRX_TRX_SHORTS = 0,
 	TEST_TRX_SENSOR_OPENS = 1,
 	TEST_TRX_GROUND_SHORTS = 2,
 	TEST_DYNAMIC_RANGE = 7,
 	TEST_OPEN_SHORT_DETECTOR = 8,
-	TEST_NOISE = 10,
-	TEST_PT11 = 11,
-	TEST_PT12 = 12,
-	TEST_PT13 = 13,
-	TEST_DYNAMIC_RANGE_DOZE = 14,
-	TEST_NOISE_DOZE = 15,
+	TEST_FAST_NOISE = 10,
+	TEST_OPEN = 11,
+	TEST_HORIZONTAL_SHORT = 12,
+	TEST_VERTICAL_SHORT = 13,
 };
 
 struct testing_hcd {
@@ -90,35 +104,74 @@ struct testing_hcd {
 	struct syna_tcm_buffer process;
 	struct syna_tcm_buffer output;
 	struct syna_tcm_hcd *tcm_hcd;
-	int (*collect_reports)(enum report_type report_type,
-			unsigned int num_of_reports);
 };
 
-DECLARE_COMPLETION(report_complete);
+static ssize_t testing_sysfs_dynamic_range_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
-DECLARE_COMPLETION(testing_remove_complete);
+static ssize_t testing_sysfs_dynamic_range_lpwg_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 
-static struct testing_hcd *testing_hcd;
+static ssize_t testing_sysfs_noise_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_fast_noise_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_noise_lpwg_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_open_short_detector_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_open_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_horizontal_short_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_vertical_short_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_reset_open_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_lockdown_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_trx_trx_shorts_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_trx_sensor_opens_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_trx_ground_shorts_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_size_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t testing_sysfs_data_show(struct file *data_file,
+		struct kobject *kobj, struct bin_attribute *attributes,
+		char *buf, loff_t pos, size_t count);
 
 static int testing_dynamic_range(void);
 
 static int testing_dynamic_range_lpwg(void);
 
-static int testing_dynamic_range_doze(void);
-
 static int testing_noise(void);
+
+static int testing_fast_noise(void);
 
 static int testing_noise_lpwg(void);
 
-static int testing_noise_doze(void);
-
 static int testing_open_short_detector(void);
 
-static int testing_pt11(void);
+static int testing_open(void);
 
-static int testing_pt12(void);
+static int testing_horizontal_short(void);
 
-static int testing_pt13(void);
+static int testing_vertical_short(void);
 
 static int testing_reset_open(void);
 
@@ -126,50 +179,60 @@ static int testing_lockdown(void);
 
 static int testing_trx(enum test_code test_code);
 
-SHOW_PROTOTYPE(testing, dynamic_range);
-SHOW_PROTOTYPE(testing, dynamic_range_lpwg);
-SHOW_PROTOTYPE(testing, dynamic_range_doze);
-SHOW_PROTOTYPE(testing, noise);
-SHOW_PROTOTYPE(testing, noise_lpwg);
-SHOW_PROTOTYPE(testing, noise_doze);
-SHOW_PROTOTYPE(testing, open_short_detector);
-SHOW_PROTOTYPE(testing, pt11);
-SHOW_PROTOTYPE(testing, pt12);
-SHOW_PROTOTYPE(testing, pt13);
-SHOW_PROTOTYPE(testing, reset_open);
-SHOW_PROTOTYPE(testing, lockdown);
-SHOW_PROTOTYPE(testing, trx_trx_shorts);
-SHOW_PROTOTYPE(testing, trx_sensor_opens);
-SHOW_PROTOTYPE(testing, trx_ground_shorts);
-SHOW_PROTOTYPE(testing, size);
+static struct testing_hcd *testing_hcd;
 
-static struct device_attribute *attrs[] = {
-	ATTRIFY(dynamic_range),
-	ATTRIFY(dynamic_range_lpwg),
-	ATTRIFY(dynamic_range_doze),
-	ATTRIFY(noise),
-	ATTRIFY(noise_lpwg),
-	ATTRIFY(noise_doze),
-	ATTRIFY(open_short_detector),
-	ATTRIFY(pt11),
-	ATTRIFY(pt12),
-	ATTRIFY(pt13),
-	ATTRIFY(reset_open),
-	ATTRIFY(lockdown),
-	ATTRIFY(trx_trx_shorts),
-	ATTRIFY(trx_sensor_opens),
-	ATTRIFY(trx_ground_shorts),
-	ATTRIFY(size),
+static struct device_attribute attrs[] = {
+	__ATTR(dynamic_range, S_IRUGO,
+			testing_sysfs_dynamic_range_show,
+			syna_tcm_store_error),
+	__ATTR(dynamic_range_lpwg, S_IRUGO,
+			testing_sysfs_dynamic_range_lpwg_show,
+			syna_tcm_store_error),
+	__ATTR(noise, S_IRUGO,
+			testing_sysfs_noise_show,
+			syna_tcm_store_error),
+	__ATTR(fast_noise, S_IRUGO,
+			testing_sysfs_fast_noise_show,
+			syna_tcm_store_error),
+	__ATTR(noise_lpwg, S_IRUGO,
+			testing_sysfs_noise_lpwg_show,
+			syna_tcm_store_error),
+	__ATTR(open_short_detector, S_IRUGO,
+			testing_sysfs_open_short_detector_show,
+			syna_tcm_store_error),
+	__ATTR(open, S_IRUGO,
+			testing_sysfs_open_show,
+			syna_tcm_store_error),
+	__ATTR(horizontal_short, S_IRUGO,
+			testing_sysfs_horizontal_short_show,
+			syna_tcm_store_error),
+	__ATTR(vertical_short, S_IRUGO,
+			testing_sysfs_vertical_short_show,
+			syna_tcm_store_error),
+	__ATTR(reset_open, S_IRUGO,
+			testing_sysfs_reset_open_show,
+			syna_tcm_store_error),
+	__ATTR(lockdown, S_IRUGO,
+			testing_sysfs_lockdown_show,
+			syna_tcm_store_error),
+	__ATTR(trx_trx_shorts, S_IRUGO,
+			testing_sysfs_trx_trx_shorts_show,
+			syna_tcm_store_error),
+	__ATTR(trx_sensor_opens, S_IRUGO,
+			testing_sysfs_trx_sensor_opens_show,
+			syna_tcm_store_error),
+	__ATTR(trx_ground_shorts, S_IRUGO,
+			testing_sysfs_trx_ground_shorts_show,
+			syna_tcm_store_error),
+	__ATTR(size, S_IRUGO,
+			testing_sysfs_size_show,
+			syna_tcm_store_error),
 };
-
-static ssize_t testing_sysfs_data_show(struct file *data_file,
-		struct kobject *kobj, struct bin_attribute *attributes,
-		char *buf, loff_t pos, size_t count);
 
 static struct bin_attribute bin_attr = {
 	.attr = {
 		.name = "data",
-		.mode = 0444,
+		.mode = S_IRUGO,
 	},
 	.size = 0,
 	.read = testing_sysfs_data_show,
@@ -179,21 +242,19 @@ testing_sysfs_show(dynamic_range)
 
 testing_sysfs_show(dynamic_range_lpwg)
 
-testing_sysfs_show(dynamic_range_doze)
-
 testing_sysfs_show(noise)
+
+testing_sysfs_show(fast_noise)
 
 testing_sysfs_show(noise_lpwg)
 
-testing_sysfs_show(noise_doze)
-
 testing_sysfs_show(open_short_detector)
 
-testing_sysfs_show(pt11)
+testing_sysfs_show(open)
 
-testing_sysfs_show(pt12)
+testing_sysfs_show(horizontal_short)
 
-testing_sysfs_show(pt13)
+testing_sysfs_show(vertical_short)
 
 testing_sysfs_show(reset_open)
 
@@ -328,66 +389,6 @@ static ssize_t testing_sysfs_data_show(struct file *data_file,
 	return retval;
 }
 
-static int testing_run_prod_test_item(enum test_code test_code)
-{
-	int retval;
-	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-
-	if (tcm_hcd->features.dual_firmware &&
-			tcm_hcd->id_info.mode != MODE_PRODUCTION_TEST) {
-		retval = tcm_hcd->switch_mode(tcm_hcd, FW_MODE_PRODUCTION_TEST);
-		if (retval < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to run production test firmware\n");
-			return retval;
-		}
-	} else if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
-			tcm_hcd->app_status != APP_STATUS_OK) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Application firmware not running\n");
-		return -ENODEV;
-	}
-
-	LOCK_BUFFER(testing_hcd->out);
-
-	retval = syna_tcm_alloc_mem(tcm_hcd,
-			&testing_hcd->out,
-			1);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for testing_hcd->out.buf\n");
-		UNLOCK_BUFFER(testing_hcd->out);
-		return retval;
-	}
-
-	testing_hcd->out.buf[0] = test_code;
-
-	LOCK_BUFFER(testing_hcd->resp);
-
-	retval = tcm_hcd->write_message(tcm_hcd,
-			CMD_PRODUCTION_TEST,
-			testing_hcd->out.buf,
-			1,
-			&testing_hcd->resp.buf,
-			&testing_hcd->resp.buf_size,
-			&testing_hcd->resp.data_length,
-			NULL,
-			0);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to write command %s\n",
-				STR(CMD_PRODUCTION_TEST));
-		UNLOCK_BUFFER(testing_hcd->resp);
-		UNLOCK_BUFFER(testing_hcd->out);
-		return retval;
-	}
-
-	UNLOCK_BUFFER(testing_hcd->resp);
-	UNLOCK_BUFFER(testing_hcd->out);
-
-	return 0;
-}
-
 static int testing_collect_reports(enum report_type report_type,
 		unsigned int num_of_reports)
 {
@@ -425,7 +426,6 @@ static int testing_collect_reports(enum report_type report_type,
 			&testing_hcd->resp.buf,
 			&testing_hcd->resp.buf_size,
 			&testing_hcd->resp.data_length,
-			NULL,
 			0);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
@@ -464,7 +464,6 @@ static int testing_collect_reports(enum report_type report_type,
 			&testing_hcd->resp.buf,
 			&testing_hcd->resp.buf_size,
 			&testing_hcd->resp.data_length,
-			NULL,
 			0);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
@@ -512,67 +511,8 @@ static void testing_get_frame_size_words(unsigned int *size, bool image_only)
 			*size += rows + cols;
 		*size += buttons;
 	}
-}
 
-static void testing_doze_frame_output(unsigned int rows, unsigned int cols)
-{
-	int retval;
-	unsigned int data_size;
-	unsigned int header_size;
-	unsigned int output_size;
-	struct syna_tcm_app_info *app_info;
-	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-
-	app_info = &tcm_hcd->app_info;
-
-	header_size = 2;
-
-	data_size = rows * cols;
-
-	if (le2_to_uint(app_info->num_of_buttons))
-		data_size++;
-
-	output_size = header_size + data_size * 2;
-
-	LOCK_BUFFER(testing_hcd->output);
-
-	retval = syna_tcm_alloc_mem(tcm_hcd,
-			&testing_hcd->output,
-			output_size);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for testing_hcd->output.buf\n");
-		UNLOCK_BUFFER(testing_hcd->output);
-		return;
-	}
-
-	testing_hcd->output.buf[0] = rows;
-	testing_hcd->output.buf[1] = cols;
-
-	output_size = header_size;
-
-	LOCK_BUFFER(testing_hcd->resp);
-
-	retval = secure_memcpy(testing_hcd->output.buf + header_size,
-			testing_hcd->output.buf_size - header_size,
-			testing_hcd->resp.buf,
-			testing_hcd->resp.buf_size,
-			testing_hcd->resp.data_length);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to copy test data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		UNLOCK_BUFFER(testing_hcd->output);
-		return;
-	}
-
-	output_size += testing_hcd->resp.data_length;
-
-	UNLOCK_BUFFER(testing_hcd->resp);
-
-	testing_hcd->output.data_length = output_size;
-
-	UNLOCK_BUFFER(testing_hcd->output);
+	return;
 }
 
 static void testing_standard_frame_output(bool image_only)
@@ -643,105 +583,8 @@ static void testing_standard_frame_output(bool image_only)
 	testing_hcd->output.data_length = output_size;
 
 	UNLOCK_BUFFER(testing_hcd->output);
-}
 
-static int testing_dynamic_range_doze(void)
-{
-	int retval;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int data;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int data_size;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
-	struct syna_tcm_app_info *app_info;
-	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-
-	app_info = &tcm_hcd->app_info;
-
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	retval = testing_run_prod_test_item(TEST_DYNAMIC_RANGE_DOZE);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
-	}
-
-	LOCK_BUFFER(testing_hcd->resp);
-
-	data_size = testing_hcd->resp.data_length / 2;
-
-	if (le2_to_uint(app_info->num_of_buttons))
-		data_size--;
-
-	if (data_size % cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Invalid max number of rows per burst\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	rows = data_size / cols;
-
-	limits_rows = ARRAY_SIZE(drt_hi_limits);
-	limits_cols = ARRAY_SIZE(drt_hi_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows = ARRAY_SIZE(drt_lo_limits);
-	limits_cols = ARRAY_SIZE(drt_lo_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = le2_to_uint(&buf[idx * 2]);
-			if (data > drt_hi_limits[row][col] ||
-					data < drt_lo_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
-
-	UNLOCK_BUFFER(testing_hcd->resp);
-
-	testing_doze_frame_output(rows, cols);
-
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return;
 }
 
 static int testing_dynamic_range_lpwg(void)
@@ -780,183 +623,224 @@ static int testing_dynamic_range_lpwg(void)
 static int testing_dynamic_range(void)
 {
 	int retval;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int data;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
+	unsigned int frame_size_words;
+	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
+
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
+	}
+
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_DYNAMIC_RANGE;
+
+	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
+
+	testing_get_frame_size_words(&frame_size_words, false);
+
+	if (frame_size_words != testing_hcd->resp.data_length / 2) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Frame size mismatch, %u, %u\n", frame_size_words, testing_hcd->resp.data_length );
+		UNLOCK_BUFFER(testing_hcd->resp);
+		return -EINVAL;
+	}
+
+	testing_hcd->result = true;
+
+	UNLOCK_BUFFER(testing_hcd->resp);
+
+	testing_standard_frame_output(true);
+
+	return 0;
+}
+
+static int testing_fast_noise(void)
+{
+	int retval;
+	unsigned int frame_size_words;
+	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
+
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
+	}
+
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_FAST_NOISE;
+
+	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
+
+	testing_get_frame_size_words(&frame_size_words, true);
+
+	if (frame_size_words != testing_hcd->resp.data_length / 2) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Frame size mismatch, %u, %u\n", frame_size_words, testing_hcd->resp.data_length );
+		UNLOCK_BUFFER(testing_hcd->resp);
+		return -EINVAL;
+	}
+
+	testing_hcd->result = true;
+
+	UNLOCK_BUFFER(testing_hcd->resp);
+
+	testing_standard_frame_output(true);
+
+	return 0;
+}
+
+static void testing_noise_output(void)
+{
+	int retval;
+	unsigned int offset;
+	unsigned int header_size;
+	unsigned int output_size;
 	unsigned int frame_size_words;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
 	app_info = &tcm_hcd->app_info;
 
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
+	testing_get_frame_size_words(&frame_size_words, true);
 
-	testing_get_frame_size_words(&frame_size_words, false);
+	header_size = sizeof(app_info->num_of_buttons) +
+			sizeof(app_info->num_of_image_rows) +
+			sizeof(app_info->num_of_image_cols) +
+			sizeof(app_info->has_hybrid_data);
 
-	retval = testing_run_prod_test_item(TEST_DYNAMIC_RANGE);
+	output_size = header_size;
+	output_size += frame_size_words * 2 * (NOISE_DELTA_FRAMES + 1);
+
+	LOCK_BUFFER(testing_hcd->output);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->output,
+			output_size);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+				"Failed to allocate memory for testing_hcd->output.buf\n");
+		UNLOCK_BUFFER(testing_hcd->output);
+		return;
 	}
 
-	LOCK_BUFFER(testing_hcd->resp);
-
-	if (frame_size_words != testing_hcd->resp.data_length / 2) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Frame size mismatch\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows = ARRAY_SIZE(drt_hi_limits);
-	limits_cols = ARRAY_SIZE(drt_hi_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows = ARRAY_SIZE(drt_lo_limits);
-	limits_cols = ARRAY_SIZE(drt_lo_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = le2_to_uint(&buf[idx * 2]);
-			if (data > drt_hi_limits[row][col] ||
-					data < drt_lo_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
-
-	UNLOCK_BUFFER(testing_hcd->resp);
-
-	testing_standard_frame_output(false);
-
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
-}
-
-static int testing_noise_doze(void)
-{
-	int retval;
-	short data;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int data_size;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
-	struct syna_tcm_app_info *app_info;
-	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
-
-	app_info = &tcm_hcd->app_info;
-
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	retval = testing_run_prod_test_item(TEST_NOISE_DOZE);
+	retval = secure_memcpy(testing_hcd->output.buf,
+			testing_hcd->output.buf_size,
+			&app_info->num_of_buttons[0],
+			header_size,
+			header_size);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+				"Failed to copy header data\n");
+		UNLOCK_BUFFER(testing_hcd->output);
+		return;
 	}
 
-	LOCK_BUFFER(testing_hcd->resp);
+	offset = header_size;
+	output_size = header_size;
 
-	data_size = testing_hcd->resp.data_length / 2;
+	LOCK_BUFFER(testing_hcd->report);
 
-	if (le2_to_uint(app_info->num_of_buttons))
-		data_size--;
-
-	if (data_size % cols) {
+	retval = secure_memcpy(testing_hcd->output.buf + offset,
+			testing_hcd->output.buf_size - offset,
+			testing_hcd->report.buf,
+			testing_hcd->report.buf_size,
+			testing_hcd->report.data_length);
+	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Invalid max number of rows per burst\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+				"Failed to copy test data\n");
+		UNLOCK_BUFFER(testing_hcd->report);
+		UNLOCK_BUFFER(testing_hcd->output);
+		return;
 	}
 
-	rows = data_size / cols;
+	offset += testing_hcd->report.data_length;
+	output_size += testing_hcd->report.data_length;
 
-	limits_rows = ARRAY_SIZE(noise_limits);
-	limits_cols = ARRAY_SIZE(noise_limits[0]);
+	UNLOCK_BUFFER(testing_hcd->report);
 
-	if (rows > limits_rows || cols > limits_cols) {
+	LOCK_BUFFER(testing_hcd->process);
+
+	retval = secure_memcpy(testing_hcd->output.buf + offset,
+			testing_hcd->output.buf_size - offset,
+			testing_hcd->process.buf,
+			testing_hcd->process.buf_size,
+			testing_hcd->process.data_length);
+	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+				"Failed to copy processed data\n");
+		UNLOCK_BUFFER(testing_hcd->process);
+		UNLOCK_BUFFER(testing_hcd->output);
+		return;
 	}
 
-	idx = 0;
-	buf = testing_hcd->resp.buf;
-	testing_hcd->result = true;
+	output_size += testing_hcd->process.data_length;
 
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data > noise_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
+	UNLOCK_BUFFER(testing_hcd->process);
 
-	UNLOCK_BUFFER(testing_hcd->resp);
+	testing_hcd->output.data_length = output_size;
 
-	testing_doze_frame_output(rows, cols);
+	UNLOCK_BUFFER(testing_hcd->output);
 
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return;
 }
 
 static int testing_noise_lpwg(void)
@@ -995,84 +879,84 @@ static int testing_noise_lpwg(void)
 static int testing_noise(void)
 {
 	int retval;
+	char *buf;
+	short *max;
 	short data;
-	unsigned char *buf;
 	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
+	unsigned int offset;
+	unsigned int report;
+	unsigned int frame_size;
+	unsigned int data_length;
 	unsigned int frame_size_words;
-	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
-	app_info = &tcm_hcd->app_info;
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
+	}
 
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	testing_get_frame_size_words(&frame_size_words, false);
-
-	retval = testing_run_prod_test_item(TEST_NOISE);
+	retval = testing_collect_reports(REPORT_DELTA, NOISE_DELTA_FRAMES);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+				"Failed to collect reports\n");
+		return retval;
 	}
 
-	LOCK_BUFFER(testing_hcd->resp);
+	testing_get_frame_size_words(&frame_size_words, true);
 
-	if (frame_size_words != testing_hcd->resp.data_length / 2) {
+	frame_size = frame_size_words * 2;
+
+	LOCK_BUFFER(testing_hcd->report);
+
+	data_length = testing_hcd->report.data_length;
+
+	if (data_length / frame_size != testing_hcd->num_of_reports ||
+			data_length % frame_size) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Frame size mismatch\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+		UNLOCK_BUFFER(testing_hcd->report);
+		return -EINVAL;
 	}
 
-	limits_rows = ARRAY_SIZE(noise_limits);
-	limits_cols = ARRAY_SIZE(noise_limits[0]);
+	LOCK_BUFFER(testing_hcd->process);
 
-	if (rows > limits_rows || cols > limits_cols) {
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->process,
+			frame_size);
+	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+				"Failed to allocate memory for testing_hcd->process.buf\n");
+		UNLOCK_BUFFER(testing_hcd->process);
+		UNLOCK_BUFFER(testing_hcd->report);
+		return retval;
 	}
 
-	idx = 0;
-	buf = testing_hcd->resp.buf;
+	buf = testing_hcd->report.buf;
+	max = (short *)testing_hcd->process.buf;
+
 	testing_hcd->result = true;
 
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data > noise_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
+	for (idx = 0; idx < frame_size_words; idx++) {
+		max[idx] = (short)le2_to_uint(&buf[idx * 2]);
+	}
+
+	for (report = 1; report < testing_hcd->num_of_reports; report++) {
+		offset = frame_size * report;
+		for (idx = 0; idx < frame_size_words; idx++) {
+			data = (short)le2_to_uint(&buf[idx * 2 + offset]);
+			max[idx] = MAX(max[idx], data);
 		}
 	}
 
-	UNLOCK_BUFFER(testing_hcd->resp);
+	UNLOCK_BUFFER(testing_hcd->report);
 
-	testing_standard_frame_output(false);
+	testing_hcd->process.data_length = frame_size;
 
-	retval = 0;
+	UNLOCK_BUFFER(testing_hcd->process);
 
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
+	testing_noise_output();
 
-	return retval;
+	return 0;
 }
 
 static void testing_open_short_detector_output(void)
@@ -1106,7 +990,7 @@ static void testing_open_short_detector_output(void)
 			output_size);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for output.buf\n");
+				"Failed to allocate memory for testing_hcd->output.buf\n");
 		UNLOCK_BUFFER(testing_hcd->output);
 		return;
 	}
@@ -1147,6 +1031,8 @@ static void testing_open_short_detector_output(void)
 	testing_hcd->output.data_length = output_size;
 
 	UNLOCK_BUFFER(testing_hcd->output);
+
+	return;
 }
 
 static int testing_open_short_detector(void)
@@ -1163,20 +1049,51 @@ static int testing_open_short_detector(void)
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
+	}
+
 	app_info = &tcm_hcd->app_info;
 
 	rows = le2_to_uint(app_info->num_of_image_rows);
 	cols = le2_to_uint(app_info->num_of_image_cols);
 	data_size = (rows * cols + 7) / 8;
 
-	retval = testing_run_prod_test_item(TEST_OPEN_SHORT_DETECTOR);
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_OPEN_SHORT_DETECTOR;
+
+	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
 		goto exit;
 	}
 
-	LOCK_BUFFER(testing_hcd->resp);
+	UNLOCK_BUFFER(testing_hcd->out);
 
 	if (data_size * 2 != testing_hcd->resp.data_length) {
 		LOGE(tcm_hcd->pdev->dev.parent,
@@ -1229,7 +1146,7 @@ static int testing_open_short_detector(void)
 	retval = 0;
 
 exit:
-	if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
+	if (tcm_hcd->reset(tcm_hcd, false, false) < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to do reset\n");
 	}
@@ -1237,265 +1154,205 @@ exit:
 	return retval;
 }
 
-static int testing_pt11(void)
+static int testing_open(void)
 {
 	int retval;
-	short data;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
 	unsigned int image_size_words;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
-	app_info = &tcm_hcd->app_info;
-
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	testing_get_frame_size_words(&image_size_words, true);
-
-	retval = testing_run_prod_test_item(TEST_PT11);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
 	}
 
+	app_info = &tcm_hcd->app_info;
+
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_OPEN;
+
 	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
+
+	testing_get_frame_size_words(&image_size_words, true);
 
 	if (image_size_words != testing_hcd->resp.data_length / 2) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Image size mismatch\n");
 		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
-	limits_rows = ARRAY_SIZE(pt11_hi_limits);
-	limits_cols = ARRAY_SIZE(pt11_hi_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	limits_rows = ARRAY_SIZE(pt11_lo_limits);
-	limits_cols = ARRAY_SIZE(pt11_lo_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
 	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data > pt11_hi_limits[row][col] ||
-					data < pt11_lo_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 
 	testing_standard_frame_output(true);
 
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return 0;
 }
 
-static int testing_pt12(void)
+static int testing_horizontal_short(void)
 {
 	int retval;
-	short data;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
 	unsigned int image_size_words;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
-	app_info = &tcm_hcd->app_info;
-
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	testing_get_frame_size_words(&image_size_words, true);
-
-	retval = testing_run_prod_test_item(TEST_PT12);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
 	}
 
+	app_info = &tcm_hcd->app_info;
+
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_HORIZONTAL_SHORT;
+
 	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
+
+	testing_get_frame_size_words(&image_size_words, true);
 
 	if (image_size_words != testing_hcd->resp.data_length / 2) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Image size mismatch\n");
 		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
-	limits_rows = ARRAY_SIZE(pt12_limits);
-	limits_cols = ARRAY_SIZE(pt12_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
 	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data < pt12_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 
 	testing_standard_frame_output(true);
 
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return 0;
 }
 
-static int testing_pt13(void)
+static int testing_vertical_short(void)
 {
 	int retval;
-	short data;
-	unsigned char *buf;
-	unsigned int idx;
-	unsigned int row;
-	unsigned int col;
-	unsigned int rows;
-	unsigned int cols;
-	unsigned int limits_rows;
-	unsigned int limits_cols;
 	unsigned int image_size_words;
 	struct syna_tcm_app_info *app_info;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
-	app_info = &tcm_hcd->app_info;
-
-	rows = le2_to_uint(app_info->num_of_image_rows);
-	cols = le2_to_uint(app_info->num_of_image_cols);
-
-	testing_get_frame_size_words(&image_size_words, true);
-
-	retval = testing_run_prod_test_item(TEST_PT13);
-	if (retval < 0) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
 	}
 
+	app_info = &tcm_hcd->app_info;
+
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	testing_hcd->out.buf[0] = TEST_VERTICAL_SHORT;
+
 	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
+
+	testing_get_frame_size_words(&image_size_words, true);
 
 	if (image_size_words != testing_hcd->resp.data_length / 2) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Image size mismatch\n");
 		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
-	limits_rows = ARRAY_SIZE(pt13_limits);
-	limits_cols = ARRAY_SIZE(pt13_limits[0]);
-
-	if (rows > limits_rows || cols > limits_cols) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	idx = 0;
-	buf = testing_hcd->resp.buf;
 	testing_hcd->result = true;
-
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			data = (short)le2_to_uint(&buf[idx * 2]);
-			if (data < pt13_limits[row][col]) {
-				testing_hcd->result = false;
-				break;
-			}
-			idx++;
-		}
-	}
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 
 	testing_standard_frame_output(true);
 
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return 0;
 }
 
 static int testing_reset_open(void)
@@ -1539,10 +1396,15 @@ static int testing_reset_open(void)
 		}
 	}
 
-	if (tcm_hcd->boot_info.last_reset_reason == reset_open_limit)
+	switch (tcm_hcd->boot_info.last_reset_reason) {
+	case 0x02:
+	case 0x13:
 		testing_hcd->result = true;
-	else
+		break;
+	default:
 		testing_hcd->result = false;
+		break;
+	}
 
 	retval = 0;
 
@@ -1568,7 +1430,7 @@ static void testing_lockdown_output(void)
 			testing_hcd->resp.data_length);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for output.buf\n");
+				"Failed to allocate memory for testing_hcd->output.buf\n");
 		UNLOCK_BUFFER(testing_hcd->resp);
 		UNLOCK_BUFFER(testing_hcd->output);
 		return;
@@ -1591,14 +1453,14 @@ static void testing_lockdown_output(void)
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 	UNLOCK_BUFFER(testing_hcd->output);
+
+	return;
 }
 
 static int testing_lockdown(void)
 {
 	int retval;
-	unsigned int idx;
 	unsigned int lockdown_size;
-	unsigned int limits_size;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
 
 	if (tcm_hcd->read_flash_data == NULL) {
@@ -1619,23 +1481,7 @@ static int testing_lockdown(void)
 
 	lockdown_size = testing_hcd->resp.data_length;
 
-	limits_size = sizeof(lockdown_limits) / sizeof(*lockdown_limits);
-
-	if (lockdown_size != limits_size) {
-		LOGE(tcm_hcd->pdev->dev.parent,
-				"Mismatching limits data\n");
-		UNLOCK_BUFFER(testing_hcd->resp);
-		return -EINVAL;
-	}
-
 	testing_hcd->result = true;
-
-	for (idx = 0; idx < lockdown_size; idx++) {
-		if (testing_hcd->resp.buf[idx] != lockdown_limits[idx]) {
-			testing_hcd->result = false;
-			break;
-		}
-	}
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 
@@ -1657,7 +1503,7 @@ static void testing_trx_output(void)
 			testing_hcd->resp.data_length);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for output.buf\n");
+				"Failed to allocate memory for testing_hcd->output.buf\n");
 		UNLOCK_BUFFER(testing_hcd->resp);
 		UNLOCK_BUFFER(testing_hcd->output);
 		return;
@@ -1680,6 +1526,8 @@ static void testing_trx_output(void)
 
 	UNLOCK_BUFFER(testing_hcd->resp);
 	UNLOCK_BUFFER(testing_hcd->output);
+
+	return;
 }
 
 static int testing_trx(enum test_code test_code)
@@ -1688,6 +1536,11 @@ static int testing_trx(enum test_code test_code)
 	unsigned char pass_vector;
 	unsigned int idx;
 	struct syna_tcm_hcd *tcm_hcd = testing_hcd->tcm_hcd;
+
+	if (tcm_hcd->id_info.mode != MODE_APPLICATION ||
+			tcm_hcd->app_status != APP_STATUS_OK) {
+		return -ENODEV;
+	}
 
 	switch (test_code) {
 	case TEST_TRX_TRX_SHORTS:
@@ -1701,14 +1554,40 @@ static int testing_trx(enum test_code test_code)
 		return -EINVAL;
 	}
 
-	retval = testing_run_prod_test_item(test_code);
+	LOCK_BUFFER(testing_hcd->out);
+
+	retval = syna_tcm_alloc_mem(tcm_hcd,
+			&testing_hcd->out,
+			1);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to run test\n");
-		goto exit;
+				"Failed to allocate memory for testing_hcd->out.buf\n");
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
 	}
 
+	testing_hcd->out.buf[0] = test_code;
+
 	LOCK_BUFFER(testing_hcd->resp);
+
+	retval = tcm_hcd->write_message(tcm_hcd,
+			CMD_PRODUCTION_TEST,
+			testing_hcd->out.buf,
+			1,
+			&testing_hcd->resp.buf,
+			&testing_hcd->resp.buf_size,
+			&testing_hcd->resp.data_length,
+			0);
+	if (retval < 0) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Failed to write command %s\n",
+				STR(CMD_PRODUCTION_TEST));
+		UNLOCK_BUFFER(testing_hcd->resp);
+		UNLOCK_BUFFER(testing_hcd->out);
+		return retval;
+	}
+
+	UNLOCK_BUFFER(testing_hcd->out);
 
 	testing_hcd->result = true;
 
@@ -1723,17 +1602,7 @@ static int testing_trx(enum test_code test_code)
 
 	testing_trx_output();
 
-	retval = 0;
-
-exit:
-	if (tcm_hcd->features.dual_firmware) {
-		if (tcm_hcd->reset(tcm_hcd, false, true) < 0) {
-			LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to do reset\n");
-		}
-	}
-
-	return retval;
+	return 0;
 }
 
 static void testing_report(void)
@@ -1753,7 +1622,7 @@ static void testing_report(void)
 				report_size * testing_hcd->num_of_reports);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for report.buf\n");
+					"Failed to allocate memory for testing_hcd->report.buf\n");
 			UNLOCK_BUFFER(testing_hcd->report);
 			return;
 		}
@@ -1782,11 +1651,13 @@ static void testing_report(void)
 
 	if (testing_hcd->report_index == testing_hcd->num_of_reports)
 		complete(&report_complete);
+
+	return;
 }
 
 static int testing_init(struct syna_tcm_hcd *tcm_hcd)
 {
-	int retval;
+	int retval = 0;
 	int idx;
 
 	testing_hcd = kzalloc(sizeof(*testing_hcd), GFP_KERNEL);
@@ -1797,8 +1668,6 @@ static int testing_init(struct syna_tcm_hcd *tcm_hcd)
 	}
 
 	testing_hcd->tcm_hcd = tcm_hcd;
-
-	testing_hcd->collect_reports = testing_collect_reports;
 
 	INIT_BUFFER(testing_hcd->out, false);
 	INIT_BUFFER(testing_hcd->resp, false);
@@ -1811,13 +1680,12 @@ static int testing_init(struct syna_tcm_hcd *tcm_hcd)
 	if (!testing_hcd->sysfs_dir) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to create sysfs directory\n");
-		retval = -EINVAL;
 		goto err_sysfs_create_dir;
 	}
 
 	for (idx = 0; idx < ARRAY_SIZE(attrs); idx++) {
 		retval = sysfs_create_file(testing_hcd->sysfs_dir,
-				&(*attrs[idx]).attr);
+				&attrs[idx].attr);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
 					"Failed to create sysfs file\n");
@@ -1837,7 +1705,7 @@ static int testing_init(struct syna_tcm_hcd *tcm_hcd)
 err_sysfs_create_bin_file:
 err_sysfs_create_file:
 	for (idx--; idx >= 0; idx--)
-		sysfs_remove_file(testing_hcd->sysfs_dir, &(*attrs[idx]).attr);
+		sysfs_remove_file(testing_hcd->sysfs_dir, &attrs[idx].attr);
 
 	kobject_put(testing_hcd->sysfs_dir);
 
@@ -1864,7 +1732,7 @@ static int testing_remove(struct syna_tcm_hcd *tcm_hcd)
 	sysfs_remove_bin_file(testing_hcd->sysfs_dir, &bin_attr);
 
 	for (idx = 0; idx < ARRAY_SIZE(attrs); idx++)
-		sysfs_remove_file(testing_hcd->sysfs_dir, &(*attrs[idx]).attr);
+		sysfs_remove_file(testing_hcd->sysfs_dir, &attrs[idx].attr);
 
 	kobject_put(testing_hcd->sysfs_dir);
 
@@ -1915,7 +1783,6 @@ static struct syna_tcm_module_cb testing_module = {
 	.reset = testing_reset,
 	.suspend = NULL,
 	.resume = NULL,
-	.early_suspend = NULL,
 };
 
 static int __init testing_module_init(void)
@@ -1928,6 +1795,8 @@ static void __exit testing_module_exit(void)
 	syna_tcm_add_module(&testing_module, false);
 
 	wait_for_completion(&testing_remove_complete);
+
+	return;
 }
 
 module_init(testing_module_init);

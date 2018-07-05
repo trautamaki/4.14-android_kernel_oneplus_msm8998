@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,9 +32,26 @@
  * DOLLARS.
  */
 
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/input.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include <linux/cdev.h>
 #include <linux/gpio.h>
+
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/delay.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include <linux/uaccess.h>
+
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/platform_device.h>
+#include <linux/input/synaptics_tcm.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include "synaptics_tcm_core.h"
 
 #define CHAR_DEVICE_NAME "tcm"
@@ -104,7 +123,7 @@ static void device_capture_touch_report(unsigned int count)
 				remaining_size);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for report.buf\n");
+					"Failed to allocate memory for device_hcd->report.buf\n");
 			report = false;
 			goto exit;
 		}
@@ -161,6 +180,8 @@ static void device_capture_touch_report(unsigned int count)
 
 exit:
 	UNLOCK_BUFFER(device_hcd->report);
+
+	return;
 }
 
 static int device_capture_touch_report_config(unsigned int count)
@@ -208,7 +229,7 @@ static int device_capture_touch_report_config(unsigned int count)
 			size);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for tcm_hcd->config.buf\n");
+				"Failed to allocate memory for tcm_hcd->config.buf\n");
 		UNLOCK_BUFFER(tcm_hcd->config);
 		return retval;
 	}
@@ -248,7 +269,7 @@ static int device_ioctl(struct inode *inp, struct file *filp, unsigned int cmd,
 
 	switch (cmd) {
 	case DEVICE_IOC_RESET:
-		retval = tcm_hcd->reset(tcm_hcd, false, true);
+		retval = tcm_hcd->reset(tcm_hcd, false, false);
 		break;
 	case DEVICE_IOC_IRQ:
 		if (arg == 0)
@@ -257,13 +278,10 @@ static int device_ioctl(struct inode *inp, struct file *filp, unsigned int cmd,
 			retval = tcm_hcd->enable_irq(tcm_hcd, true, NULL);
 		break;
 	case DEVICE_IOC_RAW:
-		if (arg == 0) {
+		if (arg == 0)
 			device_hcd->raw_mode = false;
-			tcm_hcd->update_watchdog(tcm_hcd, true);
-		} else if (arg == 1) {
+		else if (arg == 1)
 			device_hcd->raw_mode = true;
-			tcm_hcd->update_watchdog(tcm_hcd, false);
-		}
 		break;
 	case DEVICE_IOC_CONCURRENT:
 		if (arg == 0)
@@ -305,7 +323,7 @@ static ssize_t device_read(struct file *filp, char __user *buf,
 				count);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to allocate memory for resp.buf\n");
+					"Failed to allocate memory for device_hcd->resp.buf\n");
 			UNLOCK_BUFFER(device_hcd->resp);
 			goto exit;
 		}
@@ -378,14 +396,14 @@ static ssize_t device_write(struct file *filp, const char __user *buf,
 			count == 1 ? count + 1 : count);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for device_hcd->out.buf\n");
+				"Failed to allocate memory for device_hcd->out.buf\n");
 		UNLOCK_BUFFER(device_hcd->out);
 		goto exit;
 	}
 
 	if (copy_from_user(device_hcd->out.buf, buf, count)) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to copy data from user space\n");
+				"Failed to copy data from user space\n");
 		UNLOCK_BUFFER(device_hcd->out);
 		retval = -EINVAL;
 		goto exit;
@@ -401,7 +419,6 @@ static ssize_t device_write(struct file *filp, const char __user *buf,
 				NULL,
 				NULL,
 				NULL,
-				NULL,
 				0);
 	} else {
 		mutex_lock(&tcm_hcd->reset_mutex);
@@ -412,14 +429,13 @@ static ssize_t device_write(struct file *filp, const char __user *buf,
 				&device_hcd->resp.buf,
 				&device_hcd->resp.buf_size,
 				&device_hcd->resp.data_length,
-				NULL,
 				0);
 		mutex_unlock(&tcm_hcd->reset_mutex);
 	}
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to write command 0x%02x\n",
-			device_hcd->out.buf[0]);
+				"Failed to write command 0x%02x\n",
+				device_hcd->out.buf[0]);
 		UNLOCK_BUFFER(device_hcd->resp);
 		UNLOCK_BUFFER(device_hcd->out);
 		goto exit;
@@ -429,7 +445,7 @@ static ssize_t device_write(struct file *filp, const char __user *buf,
 		retval = device_capture_touch_report_config(count);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to capture touch report config\n");
+					"Failed to capture touch report config\n");
 		}
 	}
 
@@ -486,8 +502,7 @@ static char *device_devnode(struct device *dev, umode_t *mode)
 	if (!mode)
 		return NULL;
 
-	/* S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH; */
-	*mode = 0666;
+	*mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
 	return kasprintf(GFP_KERNEL, "%s/%s", PLATFORM_DRIVER_NAME,
 			dev_name(dev));
@@ -608,9 +623,10 @@ static int device_init(struct syna_tcm_hcd *tcm_hcd)
 		} else {
 			retval = gpio_export_link(&tcm_hcd->pdev->dev,
 					"attn", bdata->irq_gpio);
-			if (retval < 0)
+			if (retval < 0) {
 				LOGE(tcm_hcd->pdev->dev.parent,
 						"Failed to export GPIO link\n");
+			}
 		}
 	}
 
@@ -684,7 +700,6 @@ static struct syna_tcm_module_cb device_module = {
 	.reset = device_reset,
 	.suspend = NULL,
 	.resume = NULL,
-	.early_suspend = NULL,
 };
 
 static int __init device_module_init(void)
@@ -697,6 +712,8 @@ static void __exit device_module_exit(void)
 	syna_tcm_add_module(&device_module, false);
 
 	wait_for_completion(&device_remove_complete);
+
+	return;
 }
 
 module_init(device_module_init);

@@ -1,9 +1,11 @@
 /*
  * Synaptics TCM touchscreen driver
  *
- * Copyright (C) 2017-2019 Synaptics Incorporated. All rights reserved.
+ * Copyright (C) 2017 Synaptics Incorporated. All rights reserved.
  *
- * Copyright (C) 2017-2019 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2017 Scott Lin <scott.lin@tw.synaptics.com>
+ *
+ * Copyright (C) 2017, 2018 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +32,15 @@
  * DOLLARS.
  */
 
+/* SOMC_TOUCH_BRINGUP start */
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/input.h>
+#include <linux/delay.h>
+#include <linux/platform_device.h>
+#include <linux/input/synaptics_tcm.h>
+/* SOMC_TOUCH_BRINGUP end */
+
 #include "synaptics_tcm_core.h"
 
 #define SET_UP_RECOVERY_MODE true
@@ -38,7 +49,7 @@
 
 #define SYSFS_DIR_NAME "recovery"
 
-#define IHEX_BUF_SIZE (2048 * 1024)
+#define IHEX_BUF_SIZE (1024 * 1024)
 
 #define DATA_BUF_SIZE (512 * 1024)
 
@@ -107,7 +118,7 @@ static struct recovery_hcd *recovery_hcd;
 
 static int recovery_do_recovery(void);
 
-STORE_PROTOTYPE(recovery, recovery);
+STORE_PROTOTYPE(recovery, recovery)
 
 static struct device_attribute *attrs[] = {
 	ATTRIFY(recovery),
@@ -120,7 +131,7 @@ static ssize_t recovery_sysfs_ihex_store(struct file *data_file,
 static struct bin_attribute bin_attr = {
 	.attr = {
 		.name = "ihex",
-		.mode = 0220,
+		.mode = (S_IWUSR | S_IWGRP),
 	},
 	.size = 0,
 	.write = recovery_sysfs_ihex_store,
@@ -133,7 +144,7 @@ static ssize_t recovery_sysfs_recovery_store(struct device *dev,
 	unsigned int input;
 	struct syna_tcm_hcd *tcm_hcd = recovery_hcd->tcm_hcd;
 
-	if (kstrtouint(buf, 10, &input))
+	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
 	if (input == 1)
@@ -330,14 +341,14 @@ static int recovery_parse_ihex(void)
 				retval = recovery_add_data_entry(addr);
 				if (retval < 0) {
 					LOGE(tcm_hcd->pdev->dev.parent,
-						"Failed to add data entry\n");
+							"Failed to add data entry\n");
 					return retval;
 				}
 
 				retval = recovery_add_data_entry(addr >> 8);
 				if (retval < 0) {
 					LOGE(tcm_hcd->pdev->dev.parent,
-						"Failed to add data entry\n");
+							"Failed to add data entry\n");
 					return retval;
 				}
 			}
@@ -459,7 +470,7 @@ static int recovery_write_flash(void)
 	retval = recovery_check_status();
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to get no error recovery mode status\n");
+				"Failed to get no error recovery mode status\n");
 		return retval;
 	}
 
@@ -499,7 +510,7 @@ static int recovery_poll_erase_completion(void)
 					sizeof(command));
 			if (retval < 0) {
 				LOGE(tcm_hcd->pdev->dev.parent,
-					"Failed to read command status\n");
+						"Failed to read command status\n");
 				return retval;
 			}
 
@@ -573,7 +584,7 @@ static int recovery_erase_flash(void)
 		retval = recovery_poll_erase_completion();
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to wait for erase completion\n");
+					"Failed to wait for erase completion\n");
 			return retval;
 		}
 	} else {
@@ -583,7 +594,7 @@ static int recovery_erase_flash(void)
 	retval = recovery_check_status();
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to get no error recovery mode status\n");
+				"Failed to get no error recovery mode status\n");
 		return retval;
 	}
 
@@ -594,7 +605,6 @@ static int recovery_set_up_recovery_mode(void)
 {
 	int retval;
 	struct syna_tcm_hcd *tcm_hcd = recovery_hcd->tcm_hcd;
-	const struct syna_tcm_board_data *bdata = tcm_hcd->hw_if->bdata;
 
 	retval = tcm_hcd->identify(tcm_hcd, true);
 	if (retval < 0) {
@@ -607,7 +617,7 @@ static int recovery_set_up_recovery_mode(void)
 		retval = tcm_hcd->switch_mode(tcm_hcd, FW_MODE_BOOTLOADER);
 		if (retval < 0) {
 			LOGE(tcm_hcd->pdev->dev.parent,
-				"Failed to enter bootloader mode\n");
+					"Failed to enter bootloader mode\n");
 			return retval;
 		}
 	}
@@ -619,7 +629,6 @@ static int recovery_set_up_recovery_mode(void)
 			NULL,
 			NULL,
 			NULL,
-			NULL,
 			0);
 	if (retval < 0) {
 		LOGE(tcm_hcd->pdev->dev.parent,
@@ -627,8 +636,6 @@ static int recovery_set_up_recovery_mode(void)
 				STR(CMD_REBOOT_TO_ROM_BOOTLOADER));
 		return retval;
 	}
-
-	msleep(bdata->reset_delay_ms);
 
 	return 0;
 }
@@ -744,7 +751,7 @@ static int recovery_do_recovery(void)
 
 static int recovery_init(struct syna_tcm_hcd *tcm_hcd)
 {
-	int retval;
+	int retval = 0;
 	int idx;
 
 	recovery_hcd = kzalloc(sizeof(*recovery_hcd), GFP_KERNEL);
@@ -757,14 +764,14 @@ static int recovery_init(struct syna_tcm_hcd *tcm_hcd)
 	recovery_hcd->ihex_buf = kzalloc(IHEX_BUF_SIZE, GFP_KERNEL);
 	if (!recovery_hcd->ihex_buf) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for ihex_buf\n");
+				"Failed to allocate memory for recovery_hcd->ihex_buf\n");
 		goto err_allocate_ihex_buf;
 	}
 
 	recovery_hcd->data_buf = kzalloc(DATA_BUF_SIZE, GFP_KERNEL);
 	if (!recovery_hcd->data_buf) {
 		LOGE(tcm_hcd->pdev->dev.parent,
-			"Failed to allocate memory for data_buf\n");
+				"Failed to allocate memory for recovery_hcd->data_buf\n");
 		goto err_allocate_data_buf;
 	}
 
@@ -776,7 +783,7 @@ static int recovery_init(struct syna_tcm_hcd *tcm_hcd)
 	recovery_hcd->out_buf[1] = 0;
 	recovery_hcd->out_buf[2] = 0;
 
-	if (!ENABLE_SYSFS_INTERFACE)
+	if (ENABLE_SYSFS_INTERFACE == false)
 		return 0;
 
 	recovery_hcd->sysfs_dir = kobject_create_and_add(SYSFS_DIR_NAME,
@@ -784,7 +791,6 @@ static int recovery_init(struct syna_tcm_hcd *tcm_hcd)
 	if (!recovery_hcd->sysfs_dir) {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Failed to create sysfs directory\n");
-		retval = -EINVAL;
 		goto err_sysfs_create_dir;
 	}
 
@@ -832,7 +838,7 @@ static int recovery_remove(struct syna_tcm_hcd *tcm_hcd)
 	if (!recovery_hcd)
 		goto exit;
 
-	if (ENABLE_SYSFS_INTERFACE) {
+	if (ENABLE_SYSFS_INTERFACE == true) {
 		sysfs_remove_bin_file(recovery_hcd->sysfs_dir, &bin_attr);
 
 		for (idx = 0; idx < ARRAY_SIZE(attrs); idx++) {
@@ -875,7 +881,6 @@ static struct syna_tcm_module_cb recovery_module = {
 	.reset = recovery_reset,
 	.suspend = NULL,
 	.resume = NULL,
-	.early_suspend = NULL,
 };
 
 static int __init recovery_module_init(void)
@@ -888,6 +893,8 @@ static void __exit recovery_module_exit(void)
 	syna_tcm_add_module(&recovery_module, false);
 
 	wait_for_completion(&recovery_remove_complete);
+
+	return;
 }
 
 module_init(recovery_module_init);
