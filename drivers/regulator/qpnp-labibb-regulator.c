@@ -2856,10 +2856,6 @@ static int qpnp_labibb_regulator_disable(struct qpnp_labibb *labibb)
 	int retries;
 	bool disabled = false;
 
-#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-	qpnp_labibb_interrupt_disable_ctl(labibb);
-#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
-
 	/*
 	 * When TTW mode is enabled and LABIBB regulators are disabled, it is
 	 * recommended not to disable IBB through IBB_ENABLE_CTL when switching
@@ -2988,6 +2984,10 @@ static int qpnp_lab_regulator_disable(struct regulator_dev *rdev)
 
 	if (labibb->secure_mode)
 		return 0;
+
+#ifdef CONFIG_SOMC_LCD_OCP_ENABLED
+	qpnp_lab_interrupt_disable_ctl(labibb);
+#endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 	if (labibb->lab_vreg.vreg_enabled && !labibb->swire_control) {
 
@@ -4490,7 +4490,7 @@ static int qpnp_ibb_regulator_disable(struct regulator_dev *rdev)
 		return 0;
 
 #ifdef CONFIG_SOMC_LCD_OCP_ENABLED
-		qpnp_lab_interrupt_disable_ctl(labibb);
+	qpnp_ibb_interrupt_disable_ctl(labibb);
 #endif /* CONFIG_SOMC_LCD_OCP_ENABLED */
 
 	if (labibb->ibb_vreg.vreg_enabled && !labibb->swire_control) {
