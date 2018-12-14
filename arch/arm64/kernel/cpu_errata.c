@@ -741,6 +741,12 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_858921,
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_KRYO2XX_GOLD),
 	},
+	{
+	/* KRYO2XX all versions */
+		.desc = "ARM erratum 858921",
+		.capability = ARM64_WORKAROUND_858921,
+		MIDR_ALL_VERSIONS(MIDR_KRYO2XX_GOLD),
+	},
 #endif
 	{
 		.capability = ARM64_HARDEN_BRANCH_PREDICTOR,
