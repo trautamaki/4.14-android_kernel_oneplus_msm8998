@@ -5943,6 +5943,9 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 	chip->dt.multi_profile_load = of_property_read_bool(node,
 					"qcom,multi-profile-load");
 	chip->dt.soc_hi_res = of_property_read_bool(node, "qcom,soc-hi-res");
+	chip->dt.sys_min_volt_mv = DEFAULT_SYS_MIN_VOLT_MV;
+	of_property_read_u32(node, "qcom,fg-sys-min-voltage",
+				&chip->dt.sys_min_volt_mv);
 
 	chip->dt.sys_min_volt_mv = DEFAULT_SYS_MIN_VOLT_MV;
 	of_property_read_u32(node, "qcom,fg-sys-min-voltage",
