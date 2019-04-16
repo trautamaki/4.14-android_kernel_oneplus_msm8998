@@ -5414,6 +5414,15 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 
 		cnt++;
 
+		if ((pstate->crtc_h > mixer_height)
+				|| (pstate->crtc_w > mixer_width)) {
+			SDE_ERROR("plane w/h:%x*%x more than mixer w/h:%x*%x\n",
+					pstate->crtc_w, pstate->crtc_h,
+					mixer_width, mixer_height);
+			rc = -E2BIG;
+			goto end;
+		}
+
 		if (CHECK_LAYER_BOUNDS(pstate->crtc_y, pstate->crtc_h,
 				mode->vdisplay) ||
 		    CHECK_LAYER_BOUNDS(pstate->crtc_x, pstate->crtc_w,
