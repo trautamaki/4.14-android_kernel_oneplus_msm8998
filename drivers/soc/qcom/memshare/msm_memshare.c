@@ -853,7 +853,9 @@ static int memshare_child_probe(struct platform_device *pdev)
 		}
 		memblock[num_clients].size = size;
 		memblock[num_clients].allotted = 1;
+#ifndef CONFIG_ARCH_MSM8916
 		shared_hyp_mapping(num_clients);
+#endif
 	}
 
 	/*
