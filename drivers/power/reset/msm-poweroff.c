@@ -81,6 +81,7 @@ static void scm_disable_sdi(void);
 static bool force_warm_reboot;
 
 static int download_mode;
+static bool force_warm_reboot;
 
 static int in_panic;
 static int panic_prep_restart(struct notifier_block *this,
