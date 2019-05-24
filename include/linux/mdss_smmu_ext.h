@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,12 +47,7 @@ typedef void (*msm_smmu_handler_t) (struct mdss_smmu_intf *smmu);
  * @callback:	callback function that is called to return smmu
  *		dev
  */
-#ifdef CONFIG_FB_MSM_MDSS
+
 int mdss_smmu_request_mappings(msm_smmu_handler_t callback);
-#else
-static inline int mdss_smmu_request_mappings(msm_smmu_handler_t callback)
-{
-	return 0;
-}
-#endif
+
 #endif /* MDSS_SMMU_EXT_H */
