@@ -465,7 +465,7 @@ struct mdp_output_layer {
 };
 
 /*
- * Destination scaling info structure holds setup parameters for upscaling
+ * Destination scaling info structure holds setup paramaters for upscaling
  * setting in the destination scaling block.
  */
 struct mdp_destination_scaler_data {
@@ -840,6 +840,7 @@ struct mdp_hdr_stream {
  * hdr_meta: Metadata sent by the userspace for the HDR clip.
  */
 
+#define DRM_MSM_EXT_PANEL_HDR_CTRL
 struct mdp_hdr_stream_ctrl {
 	__u8 hdr_state;                   /* HDR state */
 	struct mdp_hdr_stream hdr_stream; /* HDR metadata */
