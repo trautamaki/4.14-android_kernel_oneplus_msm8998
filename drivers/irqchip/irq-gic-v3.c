@@ -47,6 +47,8 @@
 
 #include "irq-gic-common.h"
 
+#define SPI_START_IRQ		32	/* SPI start irq number */
+
 struct redist_region {
 	void __iomem		*redist_base;
 	phys_addr_t		phys_base;
@@ -72,8 +74,8 @@ struct gic_chip_data {
 	unsigned int pending_sgis;
 #endif
 #ifdef CONFIG_PM
-	unsigned int wakeup_irqs[SPI_START_IRQ];
-	unsigned int enabled_irqs[SPI_START_IRQ];
+	unsigned int wakeup_irqs[32];
+	unsigned int enabled_irqs[32];
 #endif
 };
 
