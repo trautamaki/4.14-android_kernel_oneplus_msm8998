@@ -207,7 +207,6 @@ static void mdm_ssr_fn(struct work_struct *work)
 	mdm_wait_for_status_low(mdm, false);
 
 	esoc_mdm_log("Starting SSR work\n");
-
 	/*
 	 * If restarting esoc fails, the SSR framework triggers a kernel panic
 	 */
