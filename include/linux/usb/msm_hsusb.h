@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -30,17 +30,6 @@
 #include <linux/usb_bam.h>
 #include <linux/extcon.h>
 #include <linux/regulator/driver.h>
-
-/**
- * Used different VDDCX voltage values
- */
-enum usb_vdd_value {
-	VDD_NONE = 0,
-	VDD_MIN,
-	VDD_MAX,
-	VDD_VAL_MAX,
-};
-
 /**
  * Requested USB votes for NOC frequency
  *
@@ -178,6 +167,11 @@ enum usb_id_state {
  * @phy_irq_pending: Gets set when PHY IRQ arrives in LPM.
  * @id_state: Indicates USBID line status.
  * @rm_pulldown: Indicates pulldown status on D+ and D- data lines.
+ * @extcon_vbus: Used for VBUS notification registration.
+ * @extcon_id: Used for ID notification registration.
+ * @vbus_nb: Notification callback for VBUS event.
+ * @id_nb: Notification callback for ID event.
+ * @extcon_registered: indicates if extcon notifier registered or not.
  * @dpdm_desc: Regulator descriptor for D+ and D- voting.
  * @dpdm_rdev: Regulator class device for dpdm regulator.
  * @dbg_idx: Dynamic debug buffer Index.
@@ -187,6 +181,8 @@ enum usb_id_state {
 		nominal mode.
  * @sdp_check: SDP detection work in case of USB_FLOAT power supply
  * @notify_charger_work: Charger notification work.
+ * @extcon_register_work: Extcon registration work.
+ * @psy_nb: Notification callback for PSY registration.
  */
 struct msm_otg {
 	struct usb_phy phy;
@@ -298,6 +294,11 @@ struct msm_otg {
 	bool phy_irq_pending;
 	enum usb_id_state id_state;
 	bool rm_pulldown;
+	struct extcon_dev       *extcon_vbus;
+	struct extcon_dev       *extcon_id;
+	struct notifier_block   vbus_nb;
+	struct notifier_block   id_nb;
+	bool			extcon_registered;
 	struct regulator_desc	dpdm_rdesc;
 	struct regulator_dev	*dpdm_rdev;
 /* Maximum debug message length */
@@ -316,13 +317,12 @@ struct msm_otg {
 	struct delayed_work perf_vote_work;
 	struct delayed_work sdp_check;
 	struct work_struct notify_charger_work;
-	bool enable_sdp_check_timer;
+	struct work_struct extcon_register_work;
+	struct notifier_block psy_nb;
 };
 
 struct ci13xxx_platform_data {
 	u8 usb_core_id;
-	int *tlmm_init_seq;
-	int tlmm_seq_count;
 	/*
 	 * value of 2^(log2_itc-1) will be used as the interrupt threshold
 	 * (ITC), when log2_itc is between 1 to 7.
@@ -334,59 +334,12 @@ struct ci13xxx_platform_data {
 	bool enable_axi_prefetch;
 };
 
-/**
- * struct msm_hsic_host_platform_data - platform device data
- *              for msm_hsic_host driver.
- * @phy_sof_workaround: Enable ALL PHY SOF bug related workarounds for
- *               SUSPEND, RESET and RESUME.
- * @phy_susp_sof_workaround: Enable PHY SOF workaround for
- *      SUSPEND.
- * @phy_reset_sof_workaround: Enable PHY SOF workaround for
- *      RESET.
- * @dis_internal_clk_gating: If set, internal clock gating in controller
- *              is disabled.
- *
- */
-struct msm_hsic_host_platform_data {
-	unsigned int strobe;
-	unsigned int data;
-	bool ignore_cal_pad_config;
-	bool phy_sof_workaround;
-	bool dis_internal_clk_gating;
-	bool phy_susp_sof_workaround;
-	bool phy_reset_sof_workaround;
-	u32 reset_delay;
-	int strobe_pad_offset;
-	int data_pad_offset;
-
-	struct msm_bus_scale_pdata *bus_scale_table;
-	unsigned int log2_irq_thresh;
-
-	/* gpio used to resume peripheral */
-	unsigned int resume_gpio;
-	int *tlmm_init_seq;
-	int tlmm_seq_count;
-
-	/*swfi latency is required while driving resume on to the bus */
-	u32 swfi_latency;
-
-	/*standalone latency is required when HSCI is active*/
-	u32 standalone_latency;
-	bool pool_64_bit_align;
-	bool enable_hbm;
-	bool disable_park_mode;
-	bool consider_ipa_handshake;
-	bool ahb_async_bridge_bypass;
-	bool disable_cerr;
-};
-
 #ifdef CONFIG_USB_BAM
 void msm_bam_set_usb_host_dev(struct device *dev);
 int msm_do_bam_disable_enable(enum usb_ctrl ctrl);
 #else
 static inline void msm_bam_set_usb_host_dev(struct device *dev) {}
-static inline int msm_do_bam_disable_enable(enum usb_ctrl ctrl)
-{ return true; }
+int msm_do_bam_disable_enable(enum usb_ctrl ctrl) { return true; }
 #endif
 #ifdef CONFIG_USB_CI13XXX_MSM
 void msm_hw_soft_reset(void);
