@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -320,15 +320,6 @@ int msm_jpeg_platform_init(irqreturn_t (*handler)(int, void *),
 		pgmn_dev->hw_version);
 	pgmn_dev->state = MSM_JPEG_INIT;
 
-	rc = msm_jpeg_set_init_dt_parms(pgmn_dev, "qcom,vbif-qos-setting",
-		pgmn_dev->vbif_base);
-	if (rc == -ENOENT)
-		JPEG_DBG("%s: No qcom,vbif-qos-setting property\n", __func__);
-	else if (rc < 0) {
-		JPEG_PR_ERR("%s: vbif qos params set fail\n", __func__);
-		goto err_reg_enable;
-	}
-
 	return 0;
 err_reg_irq_fail:
 err_fail_set_vbif:
@@ -555,3 +546,4 @@ int msm_jpeg_platform_set_dt_config(struct msm_jpeg_device *pgmn_dev)
 	}
 	return rc;
 }
+

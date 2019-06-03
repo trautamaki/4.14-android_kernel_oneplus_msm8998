@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,8 +30,7 @@
 #define JPEG_DEV_CNT 4
 #define JPEG_DEC_ID 2
 #define UINT32_MAX (0xFFFFFFFFU)
-#define MAX_WAIT_TIMEOUT UINT_MAX
-#define MAX_HW_CMD_N 4095
+#define MAX_WAIT_TIMEOUT LONG_MAX
 
 
 #ifdef CONFIG_COMPAT
@@ -820,19 +819,16 @@ static int msm_jpeg_ioctl_hw_cmd(struct msm_jpeg_device *pgmn_dev,
 	void __user *arg)
 {
 	struct msm_jpeg_hw_cmd hw_cmd;
-	int is_copy_to_user = 0;
+	int is_copy_to_user;
 
 	if (copy_from_user(&hw_cmd, (const void __user *)arg,
 		sizeof(struct msm_jpeg_hw_cmd))) {
 		JPEG_PR_ERR("%s:%d] failed\n", __func__, __LINE__);
 		return -EFAULT;
 	}
-	if (hw_cmd.n > 0 && hw_cmd.n <= MAX_HW_CMD_N) {
-		is_copy_to_user = msm_jpeg_hw_exec_cmds(&hw_cmd, 1,
-			pgmn_dev->res_size, pgmn_dev->base);
-	} else {
-		JPEG_PR_ERR("%s:%d] n %d\n", __func__, __LINE__, hw_cmd.n);
-	}
+
+	is_copy_to_user = msm_jpeg_hw_exec_cmds(&hw_cmd, 1,
+		pgmn_dev->res_size, pgmn_dev->base);
 	JPEG_DBG(
 	"%s:%d] type %d, n %d, offset %d, mask %x, data %x, pdata %lx\n",
 		__func__, __LINE__, hw_cmd.type, hw_cmd.n, hw_cmd.offset,
@@ -1278,8 +1274,8 @@ long __msm_jpeg_compat_ioctl(struct msm_jpeg_device *pgmn_dev,
 	unsigned int cmd, unsigned long arg)
 {
 	int rc = 0;
-	struct msm_jpeg_ctrl_cmd *pctrl_cmd = NULL, ctrl_cmd = {0};
-	struct msm_jpeg_buf jpeg_buf = {0};
+	struct msm_jpeg_ctrl_cmd *pctrl_cmd = NULL, ctrl_cmd;
+	struct msm_jpeg_buf jpeg_buf;
 	mm_segment_t old_fs;
 
 	old_fs = get_fs();
@@ -1540,46 +1536,6 @@ long __msm_jpeg_ioctl(struct msm_jpeg_device *pgmn_dev,
 	return rc;
 }
 
-static void msm_jpeg_iommu_fault_handler (struct iommu_domain *domain,
-	struct device *dev, unsigned long iova, int flags, void *token)
-{
-	struct msm_jpeg_device *pgmn_dev;
-
-	if (token) {
-		pgmn_dev = token;
-		JPEG_PR_ERR("%s: core type %d addr 0x%lx\n",
-			__func__, pgmn_dev->core_type, iova);
-		JPEG_PR_ERR("%s: FE ion_fd %d y_addr 0x%x y_len %d\n",
-			__func__,
-			pgmn_dev->fe_pingpong_buf.buf[1].ion_fd,
-			pgmn_dev->fe_pingpong_buf.buf[1].y_buffer_addr,
-			pgmn_dev->fe_pingpong_buf.buf[1].y_len);
-		JPEG_PR_ERR("%s: FE cbcr_addr %x cbcr_len %d\n",
-			__func__,
-			pgmn_dev->fe_pingpong_buf.buf[1].cbcr_buffer_addr,
-			pgmn_dev->fe_pingpong_buf.buf[1].cbcr_len);
-		JPEG_PR_ERR("%s: FE pln2_addr %x pln2_len %d frame_len %d\n",
-			__func__,
-			pgmn_dev->fe_pingpong_buf.buf[1].pln2_addr,
-			pgmn_dev->fe_pingpong_buf.buf[1].pln2_len,
-			pgmn_dev->fe_pingpong_buf.buf[1].framedone_len);
-		JPEG_PR_ERR("%s: WE ion_fd %d y_addr 0x%x y_len %d\n",
-			__func__,
-			pgmn_dev->we_pingpong_buf.buf[0].ion_fd,
-			pgmn_dev->we_pingpong_buf.buf[0].y_buffer_addr,
-			pgmn_dev->we_pingpong_buf.buf[0].y_len);
-		JPEG_PR_ERR("%s: WE  cbcr_addr %x cbcr_len %d\n",
-			__func__,
-			pgmn_dev->we_pingpong_buf.buf[0].cbcr_buffer_addr,
-			pgmn_dev->we_pingpong_buf.buf[0].cbcr_len);
-		JPEG_PR_ERR("%s: WE pln2_addr %x pln2_len %d frame_len %d\n",
-			__func__,
-			pgmn_dev->we_pingpong_buf.buf[0].pln2_addr,
-			pgmn_dev->we_pingpong_buf.buf[0].pln2_len,
-			pgmn_dev->we_pingpong_buf.buf[0].framedone_len);
-	}
-}
-
 int __msm_jpeg_init(struct msm_jpeg_device *pgmn_dev)
 {
 	int rc = 0;
@@ -1612,12 +1568,6 @@ int __msm_jpeg_init(struct msm_jpeg_device *pgmn_dev)
 				__func__);
 		goto err_smmu;
 	}
-
-	cam_smmu_reg_client_page_fault_handler(
-			pgmn_dev->iommu_hdl,
-			msm_jpeg_iommu_fault_handler,
-			NULL,
-			pgmn_dev);
 
 	/* setup all the resources for the jpeg driver */
 	rc = msm_jpeg_platform_setup(pgmn_dev);

@@ -1,5 +1,4 @@
-/* Copyright (c) 2015-2016, 2018-2019, The Linux Foundation.
- * All rights reserved.
+/* Copyright (c) 2015-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -233,7 +232,7 @@ struct msm_jpegdma_buf_handle {
 	int fd;
 	struct msm_jpegdma_device *dma;
 	unsigned long size;
-	dma_addr_t addr;
+	ion_phys_addr_t addr;
 };
 
 /*

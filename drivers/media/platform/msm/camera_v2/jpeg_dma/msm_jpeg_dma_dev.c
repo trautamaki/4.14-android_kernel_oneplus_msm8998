@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -637,8 +637,9 @@ static int msm_jpegdma_querycap(struct file *file,
 	cap->bus_info[0] = 0;
 	strlcpy(cap->driver, MSM_JPEGDMA_DRV_NAME, sizeof(cap->driver));
 	strlcpy(cap->card, MSM_JPEGDMA_DRV_NAME, sizeof(cap->card));
-	cap->capabilities = V4L2_CAP_STREAMING |
-		V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_VIDEO_CAPTURE;
+	cap->device_caps = V4L2_CAP_STREAMING |
+			V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_VIDEO_CAPTURE;
+	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
 
 	return 0;
 }
@@ -892,12 +893,8 @@ static int msm_jpegdma_dqbuf(struct file *file,
 	void *fh, struct v4l2_buffer *buf)
 {
 	struct jpegdma_ctx *ctx = msm_jpegdma_ctx_from_fh(fh);
-	int ret;
 
-	mutex_lock(&ctx->lock);
-	ret = v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
-	mutex_unlock(&ctx->lock);
-	return ret;
+	return v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
 }
 
 /*
@@ -912,15 +909,13 @@ static int msm_jpegdma_streamon(struct file *file,
 	struct jpegdma_ctx *ctx = msm_jpegdma_ctx_from_fh(fh);
 	int ret;
 
-	mutex_lock(&ctx->lock);
-	if (!msm_jpegdma_config_ok(ctx)) {
-		mutex_unlock(&ctx->lock);
+	if (!msm_jpegdma_config_ok(ctx))
 		return -EINVAL;
-	}
+
 	ret = v4l2_m2m_streamon(file, ctx->m2m_ctx, buf_type);
 	if (ret < 0)
 		dev_err(ctx->jdma_device->dev, "Stream on fail\n");
-	mutex_unlock(&ctx->lock);
+
 	return ret;
 }
 
@@ -935,7 +930,6 @@ static int msm_jpegdma_streamoff(struct file *file,
 {
 	struct jpegdma_ctx *ctx = msm_jpegdma_ctx_from_fh(fh);
 	int ret;
-
 	mutex_lock(&ctx->lock);
 	ret = v4l2_m2m_streamoff(file, ctx->m2m_ctx, buf_type);
 	if (ret < 0)
@@ -1495,7 +1489,6 @@ static struct platform_driver jpegdma_driver = {
 		.name = MSM_JPEGDMA_DRV_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = msm_jpegdma_dt_match,
-		.suppress_bind_attrs = true,
 	},
 };
 

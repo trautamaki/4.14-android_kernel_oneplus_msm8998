@@ -51,3 +51,4 @@ struct avtimer_fptr_t {
 void msm_isp_set_avtimer_fptr(struct avtimer_fptr_t avtimer_func);
 #endif
 #endif
+
