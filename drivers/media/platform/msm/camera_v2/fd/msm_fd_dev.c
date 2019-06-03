@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,7 +22,6 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
 #include <media/videobuf2-v4l2.h>
-#include <linux/clk.h>
 #include <linux/clk/qcom.h>
 
 #include "msm_fd_dev.h"
@@ -307,7 +306,7 @@ static void *msm_fd_get_userptr(struct device *alloc_ctx,
 
 	return buf;
 error:
-	kfree(buf);
+	kzfree(buf);
 	return ERR_PTR(-ENOMEM);
 }
 
@@ -1035,24 +1034,22 @@ static int msm_fd_s_ctrl(struct file *file, void *fh, struct v4l2_control *a)
 	case V4L2_CID_FD_FACE_ANGLE:
 		idx = msm_fd_get_idx_from_value(a->value, msm_fd_angle,
 			ARRAY_SIZE(msm_fd_angle));
-		if (idx < ARRAY_SIZE(msm_fd_angle))
-			ctx->settings.angle_index = idx;
+
+		ctx->settings.angle_index = idx;
 		a->value = msm_fd_angle[ctx->settings.angle_index];
 		break;
 	case V4L2_CID_FD_FACE_DIRECTION:
 		idx = msm_fd_get_idx_from_value(a->value, msm_fd_dir,
 			ARRAY_SIZE(msm_fd_dir));
 
-		if (idx < ARRAY_SIZE(msm_fd_dir))
-			ctx->settings.direction_index = idx;
+		ctx->settings.direction_index = idx;
 		a->value = msm_fd_dir[ctx->settings.direction_index];
 		break;
 	case V4L2_CID_FD_MIN_FACE_SIZE:
 		idx = msm_fd_get_idx_from_value(a->value, msm_fd_min_size,
 			ARRAY_SIZE(msm_fd_min_size));
 
-		if (idx < ARRAY_SIZE(msm_fd_min_size))
-			ctx->settings.min_size_index = idx;
+		ctx->settings.min_size_index = idx;
 		a->value = msm_fd_min_size[ctx->settings.min_size_index];
 		break;
 	case V4L2_CID_FD_DETECTION_THRESHOLD:
@@ -1476,7 +1473,6 @@ static struct platform_driver fd_driver = {
 		.name = MSM_FD_DRV_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = msm_fd_dt_match,
-		.suppress_bind_attrs = true,
 	},
 };
 

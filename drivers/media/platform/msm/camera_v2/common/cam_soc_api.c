@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/msm-bus.h>
-#include <linux/clk.h>
+#include <linux/clk/qcom.h>
 #include "cam_soc_api.h"
 
 struct msm_cam_bus_pscale_data {
@@ -360,6 +360,7 @@ int msm_camera_clk_enable(struct device *dev,
 
 	if (enable) {
 		for (i = 0; i < num_clk; i++) {
+			CDBG("enable %s\n", clk_info[i].clk_name);
 			if (clk_info[i].clk_rate > 0) {
 				clk_rate = clk_round_rate(clk_ptr[i],
 					clk_info[i].clk_rate);
@@ -410,6 +411,8 @@ int msm_camera_clk_enable(struct device *dev,
 	} else {
 		for (i = num_clk - 1; i >= 0; i--) {
 			if (clk_ptr[i] != NULL) {
+				CDBG("%s disable %s\n", __func__,
+					clk_info[i].clk_name);
 				clk_disable_unprepare(clk_ptr[i]);
 			}
 		}
@@ -659,6 +662,7 @@ int msm_camera_regulator_enable(struct msm_cam_regulator *vdd_info,
 
 	for (i = 0; i < cnt; i++) {
 		if (tmp && !IS_ERR_OR_NULL(tmp->vdd)) {
+			CDBG("name : %s, enable : %d\n", tmp->name, enable);
 			if (enable) {
 				rc = regulator_enable(tmp->vdd);
 				if (rc < 0) {
@@ -687,34 +691,6 @@ error:
 }
 EXPORT_SYMBOL(msm_camera_regulator_enable);
 
-/* disable/Disable regulators */
-int msm_camera_regulator_disable(struct msm_cam_regulator *vdd_info,
-				int cnt, int disable)
-{
-	int i;
-	int rc;
-	struct msm_cam_regulator *tmp = vdd_info;
-
-	if (!tmp) {
-		pr_err("Invalid params");
-		return -EINVAL;
-	}
-
-	for (i = cnt; i > 0; i--) {
-		if (disable) {
-			rc = regulator_disable(tmp[i-1].vdd);
-			if (rc < 0) {
-				pr_debug("%s: %s failed %d\n",
-					__func__, tmp[i-1].name, i);
-				return rc;
-			}
-		}
-	}
-	return 0;
-}
-EXPORT_SYMBOL(msm_camera_regulator_disable);
-
-
 /* set regulator mode */
 int msm_camera_regulator_set_mode(struct msm_cam_regulator *vdd_info,
 				int cnt, bool mode)
@@ -734,7 +710,7 @@ int msm_camera_regulator_set_mode(struct msm_cam_regulator *vdd_info,
 			CDBG("name : %s, enable : %d\n", tmp->name, mode);
 			if (mode) {
 				rc = regulator_set_mode(tmp->vdd,
-					REGULATOR_MODE_NORMAL);
+					REGULATOR_MODE_FAST);
 				if (rc < 0) {
 					pr_err("regulator enable failed %d\n",
 						i);

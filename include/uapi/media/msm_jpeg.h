@@ -122,3 +122,4 @@ struct msm_jpeg_hw_cmds {
 };
 
 #endif
+

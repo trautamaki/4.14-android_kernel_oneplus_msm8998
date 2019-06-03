@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018,2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,9 +36,6 @@ static struct v4l2_device *msm_v4l2_dev;
 static struct list_head    ordered_sd_list;
 static struct mutex        ordered_sd_mtx;
 static struct mutex        v4l2_event_mtx;
-
-static atomic_t qos_add_request_done = ATOMIC_INIT(0);
-static struct pm_qos_request msm_v4l2_pm_qos_request;
 
 static struct msm_queue_head *msm_session_q;
 
@@ -85,13 +82,13 @@ static uint32_t gpu_limit;
 	type *node = NULL;				\
 	spin_lock_irqsave(&__q->lock, flags);			\
 	if (!list_empty(&__q->list)) {				\
-		list_for_each_entry(node, &__q->list, member) \
-			if (node->sd == q_node) {	\
-				__q->len--;				\
-				list_del_init(&node->member);		\
-				kzfree(node);				\
-				break;					\
-			}						\
+		list_for_each_entry(node, &__q->list, member)	\
+		if (node->sd == q_node) {				\
+			__q->len--;				\
+			list_del_init(&node->member);		\
+			kzfree(node);				\
+			break;					\
+		}						\
 	}							\
 	spin_unlock_irqrestore(&__q->lock, flags);		\
 })
@@ -103,12 +100,12 @@ static uint32_t gpu_limit;
 	spin_lock_irqsave(&__q->lock, flags);			\
 	if (!list_empty(&__q->list)) {				\
 		list_for_each_entry(node, &__q->list, member)	\
-			if (node == q_node) {				\
-				__q->len--;				\
-				list_del_init(&node->member);		\
-				kzfree(node);				\
-				break;					\
-			}						\
+		if (node == q_node) {				\
+			__q->len--;				\
+			list_del_init(&node->member);		\
+			kzfree(node);				\
+			break;					\
+		}						\
 	}							\
 	spin_unlock_irqrestore(&__q->lock, flags);		\
 })
@@ -140,9 +137,9 @@ typedef int (*msm_queue_func)(void *d1, void *d2);
 	spin_lock_irqsave(&__q->lock, flags);			\
 	if (!list_empty(&__q->list)) { \
 		list_for_each_entry(node, &__q->list, member) \
-			if (node && __f)  { \
-				__f(node, data); \
-			} \
+		if (node && __f)  { \
+			__f(node, data); \
+	  } \
 	} \
 	spin_unlock_irqrestore(&__q->lock, flags);			\
 } while (0)
@@ -157,10 +154,10 @@ typedef int (*msm_queue_find_func)(void *d1, void *d2);
 	spin_lock_irqsave(&__q->lock, flags);			\
 	if (!list_empty(&__q->list)) { \
 		list_for_each_entry(node, &__q->list, member) \
-			if ((__f) && __f(node, data)) { \
-				__ret = node; \
-				break; \
-			} \
+		if ((__f) && __f(node, data)) { \
+			__ret = node; \
+			break; \
+		} \
 	} \
 	spin_unlock_irqrestore(&__q->lock, flags); \
 	__ret; \
@@ -224,29 +221,6 @@ static inline int __msm_queue_find_command_ack_q(void *d1, void *d2)
 	return (ack->stream_id == *(unsigned int *)d2) ? 1 : 0;
 }
 
-static inline void msm_pm_qos_add_request(void)
-{
-	pr_info("%s: add request", __func__);
-	if (atomic_cmpxchg(&qos_add_request_done, 0, 1))
-		return;
-	pm_qos_add_request(&msm_v4l2_pm_qos_request, PM_QOS_CPU_DMA_LATENCY,
-	PM_QOS_DEFAULT_VALUE);
-}
-
-static void msm_pm_qos_remove_request(void)
-{
-	pr_info("%s: remove request", __func__);
-	if (!atomic_cmpxchg(&qos_add_request_done, 1, 0))
-		return;
-	pm_qos_remove_request(&msm_v4l2_pm_qos_request);
-}
-
-void msm_pm_qos_update_request(int val)
-{
-	pr_info("%s: update request %d", __func__, val);
-	msm_pm_qos_add_request();
-	pm_qos_update_request(&msm_v4l2_pm_qos_request, val);
-}
 
 struct msm_session *msm_session_find(unsigned int session_id)
 {
@@ -810,7 +784,7 @@ static long msm_private_ioctl(struct file *file, void *fh,
 			__msm_queue_find_command_ack_q,
 			&stream_id);
 		if (WARN_ON(!cmd_ack)) {
-			kfree(ret_cmd);
+			kzfree(ret_cmd);
 			rc = -EFAULT;
 			break;
 		}
@@ -1048,9 +1022,6 @@ static int msm_close(struct file *filep)
 			__msm_sd_close_subdevs(msm_sd, &sd_close);
 	mutex_unlock(&ordered_sd_mtx);
 
-	/* remove msm_v4l2_pm_qos_request */
-	msm_pm_qos_remove_request();
-
 	/* send v4l2_event to HAL next*/
 	msm_queue_traverse_action(msm_session_q, struct msm_session, list,
 		__msm_close_destry_session_notify_apps, NULL);
@@ -1110,8 +1081,6 @@ static int msm_open(struct file *filep)
 	msm_eventq = filep->private_data;
 	spin_unlock_irqrestore(&msm_eventq_lock, flags);
 
-	/* register msm_v4l2_pm_qos_request */
-	msm_pm_qos_add_request();
 	return rc;
 }
 
@@ -1368,8 +1337,8 @@ static int msm_probe(struct platform_device *pdev)
 	if (WARN_ON(rc < 0))
 		goto media_fail;
 
-	if (WARN_ON((rc == media_entity_pads_init(&pvdev->vdev->entity,
-			0, NULL)) < 0))
+	rc = media_entity_pads_init(&pvdev->vdev->entity, 0, NULL);
+	if (WARN_ON(rc < 0))
 		goto entity_fail;
 
 	pvdev->vdev->entity.function = QCAMERA_VNODE_GROUP_ID;
@@ -1450,7 +1419,7 @@ mdev_fail:
 #endif
 	video_device_release(pvdev->vdev);
 video_fail:
-	kfree(pvdev);
+	kzfree(pvdev);
 pvdev_fail:
 	kzfree(msm_v4l2_dev);
 probe_end:
