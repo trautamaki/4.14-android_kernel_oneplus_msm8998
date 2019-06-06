@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, 2019-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,7 @@
 		clock-names = "ref_clk_src",
 			"ref_clk",
 			"ref_aux_clk";
-		clocks = <&clock_rpmcc RPM_SMD_LN_BB_CLK1>,
+		clocks = <&clock_rpmcc RPM_LN_BB_CLK1>,
 			<&clock_gcc GCC_UFS_CLKREF_CLK>,
 			<&clock_gcc GCC_UFS_PHY_AUX_CLK>;
 		status = "disabled";
@@ -93,7 +93,7 @@
 			<&clock_gcc GCC_UFS_AHB_CLK>,
 			<&clock_gcc GCC_UFS_UNIPRO_CORE_CLK>,
 			<&clock_gcc GCC_UFS_ICE_CORE_CLK>,
-			<&clock_rpmcc RPM_SMD_LN_BB_CLK1>,
+			<&clock_rpmcc RPM_LN_BB_CLK1>,
 			<&clock_gcc GCC_UFS_TX_SYMBOL_0_CLK>,
 			<&clock_gcc GCC_UFS_RX_SYMBOL_0_CLK>;
 		freq-table-hz =
@@ -155,8 +155,8 @@
 		interrupt-names = "hs_phy_irq", "ss_phy_irq", "pwr_event_irq";
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
-		dpdm-supply = <&qusb_phy0>;
 
+		qcom,usb-dbm = <&dbm_1p5>;
 		qcom,msm-bus,name = "usb3";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
@@ -195,17 +195,11 @@
 			usb-phy = <&qusb_phy0>, <&ssphy>;
 			tx-fifo-resize;
 			snps,usb3-u1u2-disable;
+			snps,nominal-elastic-buffer;
 			snps,disable-clk-gating;
 			snps,has-lpm-erratum;
 			snps,is-utmi-l1-suspend;
 			snps,hird-threshold = /bits/ 8 <0x0>;
-			dr_mode = "otg";
-			linux,sysdev_is_parent;
-			snps,dis_u2_susphy_quirk;
-			snps,dis_enblslpm_quirk;
-			snps,usb3_lpm_capable;
-			usb-core-id = <0>;
-			maximum-speed = "super-speed";
 		};
 
 		qcom,usbbam@a904000 {
@@ -252,7 +246,7 @@
 				qcom,peer-bam = <0>;
 				qcom,peer-bam-physical-address = <0x06064000>;
 				qcom,src-bam-pipe-index = <0>;
-				qcom,dst-bam-pipe-index = <3>;
+				qcom,dst-bam-pipe-index = <2>;
 				qcom,data-fifo-offset = <0x0>;
 				qcom,data-fifo-size = <0x1800>;
 				qcom,descriptor-fifo-offset = <0x1800>;
@@ -301,7 +295,7 @@
 		qcom,phy-clk-scheme = "cml";
 		qcom,major-rev = <1>;
 
-		clocks = <&clock_rpmcc RPM_SMD_LN_BB_CLK1>,
+		clocks = <&clock_rpmcc RPM_LN_BB_CLK1>,
 			<&clock_gcc GCC_RX0_USB2_CLKREF_CLK>,
 			<&clock_gcc GCC_USB_PHY_CFG_AHB2PHY_CLK>;
 
@@ -312,7 +306,7 @@
 	};
 
 	ssphy: ssphy@c010000 {
-		compatible = "qcom,usb-ssphy-qmp-usb3-or-dp";
+		compatible = "qcom,usb-ssphy-qmp-v2";
 		reg = <0xc010000 0xe18>,
 			<0x01fcb244 0x4>,
 			<0x01fcb248 0x4>;
@@ -443,7 +437,7 @@
 		clocks = <&clock_gcc GCC_USB3_PHY_AUX_CLK>,
 			<&clock_gcc GCC_USB3_PHY_PIPE_CLK>,
 			<&clock_gcc GCC_USB_PHY_CFG_AHB2PHY_CLK>,
-			<&clock_rpmcc RPM_SMD_LN_BB_CLK1>,
+			<&clock_rpmcc RPM_LN_BB_CLK1>,
 			<&clock_gcc GCC_USB3_CLKREF_CLK>;
 
 		clock-names = "aux_clk", "pipe_clk", "cfg_ahb_clk",
@@ -459,6 +453,12 @@
 		iommus = <&lpass_q6_smmu 6>;
 		qcom,usb-audio-stream-id = <6>;
 		qcom,usb-audio-intr-num = <2>;
+	};
+
+	dbm_1p5: dbm@a8f8000 {
+		compatible = "qcom,usb-dbm-1p5";
+		reg = <0xa8f8000 0x300>;
+		qcom,reset-ep-after-lpm-resume;
 	};
 
        usb2s: hsusb@c200000 {
@@ -502,13 +502,10 @@
 			interrupts = <0 143 0>;
 			usb-phy = <&qusb_phy1>, <&usb_nop_phy>;
 			maximum-speed = "high-speed";
+			snps,nominal-elastic-buffer;
 			snps,is-utmi-l1-suspend;
 			snps,hird-threshold = /bits/ 8 <0x0>;
 			dr_mode = "host";
-			linux,sysdev_is_parent;
-			snps,dis_enblslpm_quirk;
-			snps,dis_u2_susphy_quirk;
-			usb-core-id = <1>;
 		};
 	};
 
@@ -539,7 +536,7 @@
 
 		clocks = <&clock_gcc GCC_USB_PHY_CFG_AHB2PHY_CLK>,
 			<&clock_gcc GCC_RX1_USB2_CLKREF_CLK>,
-			<&clock_rpmcc RPM_SMD_LN_BB_CLK1>;
+			<&clock_rpmcc RPM_LN_BB_CLK1>;
 		clock-names = "cfg_ahb_clk", "ref_clk", "ref_clk_src";
 
 		resets = <&clock_gcc GCC_QUSB2PHY_SEC_BCR>;

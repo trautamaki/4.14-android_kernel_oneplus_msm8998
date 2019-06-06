@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,9 +10,9 @@
  * GNU General Public License for more details.
  */
 
+#include "sdm660-pinctrl.dtsi"
 #include "sdm660-camera-sensor-mtp.dtsi"
-
-&vendor {
+/ {
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "fg-gen3-batterydata-itech-3000mah.dtsi"
@@ -49,23 +49,22 @@
 
 &pm660_gpios {
 	/* GPIO 4 (NFC_CLK_REQ) */
-	nfc_clk {
-		nfc_clk_default: nfc_clk_default {
-			pins = "gpio4";
-			function = "normal";
-			input-enable;
-			power-source = <1>;
-		};
+	gpio@c300 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <1>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
 	};
 
 	/* GPIO 11 for Home Key */
-	home_key {
-		home_key_default: home_key_default {
-			pins = "gpio11";
-			function = "normal";
-			input-enable;
-			bias-pull-up;
-		};
+	gpio@ca00 {
+		status = "okay";
+		qcom,mode = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,out-strength = <1>;
 	};
 };
 
@@ -84,10 +83,9 @@
 		interrupts = <28 0>;
 		interrupt-names = "nfc_irq";
 		pinctrl-names = "nfc_active", "nfc_suspend";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active
-				&nfc_clk_default>;
+		pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
 		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
-		clocks = <&clock_rpmcc RPM_SMD_LN_BB_CLK3_PIN>;
+		clocks = <&clock_rpmcc RPM_LN_BB_CLK3_PIN>;
 		clock-names = "ref_clk";
 	};
 };
@@ -128,12 +126,7 @@
 };
 
 &pm660l_wled {
-	qcom,string-cfg= <6>;
-	status = "ok";
-};
-
-&pm660l_lcdb {
-	status = "ok";
+	qcom,led-strings-list = [01 02];
 };
 
 &dsi_dual_nt35597_truly_video {
