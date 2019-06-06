@@ -36,6 +36,16 @@ dtb-$(CONFIG_ARCH_SM8150)	+= sm8150-cdp.dtb \
 
 endif
 
+ifeq ($(CONFIG_DRM),y)
+# SDM660 - SDE
+dtb-$(CONFIG_MACH_SONY_PIONEER)		+= sdm630-nile-pioneer-sde.dtb
+dtb-$(CONFIG_MACH_SONY_DISCOVERY)	+= sdm630-nile-discovery-sde.dtb
+dtb-$(CONFIG_MACH_SONY_VOYAGER)		+= sdm630-nile-voyager-sde.dtb
+
+dtb-$(CONFIG_MACH_SONY_KIRIN)		+= sdm630-ganges-kirin-sde.dtb
+dtb-$(CONFIG_MACH_SONY_MERMAID)		+= sdm636-ganges-mermaid-sde.dtb
+endif
+
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
 		sdmshrike-cdp-overlay.dtbo \

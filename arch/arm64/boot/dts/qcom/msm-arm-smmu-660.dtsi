@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, 2019-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,18 +21,18 @@
 		compatible = "qcom,smmu-v2";
 		reg = <0x16c0000 0x40000>;
 		#iommu-cells = <1>;
-		qcom,skip-init;
 		qcom,use-3-lvl-tables;
-		qcom,regulator-names = "vdd";
+		qcom,register-save;
+		qcom,skip-init;
 		#global-interrupts = <2>;
 		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 231 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 373 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 374 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 375 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 376 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 377 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 378 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 374 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 375 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 376 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 377 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_SPI 378 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 462 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 463 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 464 IRQ_TYPE_LEVEL_HIGH>,
@@ -65,9 +65,9 @@
 		compatible = "qcom,smmu-v2";
 		reg = <0x5100000 0x40000>;
 		#iommu-cells = <1>;
-		qcom,skip-init;
 		qcom,use-3-lvl-tables;
-		qcom,regulator-names = "vdd";
+		qcom,register-save;
+		qcom,skip-init;
 		#global-interrupts = <2>;
 		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 231 IRQ_TYPE_LEVEL_HIGH>,
@@ -88,6 +88,7 @@
 			     <GIC_SPI 225 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 310 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 404 IRQ_TYPE_LEVEL_HIGH>;
+		qcom,regulator-names = "vdd";
 		vdd-supply = <&gdsc_hlos1_vote_lpass_adsp>;
 		clocks = <&clock_gcc HLOS1_VOTE_LPASS_ADSP_SMMU_CLK>;
 		clock-names = "lpass_q6_smmu_clk";
@@ -98,9 +99,10 @@
 		compatible = "qcom,smmu-v2";
 		reg = <0xcd00000 0x40000>;
 		#iommu-cells = <1>;
-		qcom,skip-init;
 		qcom,use-3-lvl-tables;
-		qcom,regulator-names = "vdd";
+		qcom,register-save;
+		qcom,no-smr-check;
+		qcom,skip-init;
 		#global-interrupts = <2>;
 		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 231 IRQ_TYPE_LEVEL_HIGH>,
@@ -128,9 +130,10 @@
 			     <GIC_SPI 274 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 275 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 276 IRQ_TYPE_LEVEL_HIGH>;
+		qcom,regulator-names = "vdd";
 		vdd-supply = <&gdsc_bimc_smmu>;
 		clocks = <&clock_mmss MMSS_MNOC_AHB_CLK>,
-			 <&clock_rpmcc  RPM_SMD_MMSSNOC_AXI_CLK>,
+			 <&clock_rpmcc  MMSSNOC_AXI_CLK>,
 			 <&clock_mmss MMSS_BIMC_SMMU_AHB_CLK>,
 			 <&clock_mmss MMSS_BIMC_SMMU_AXI_CLK>;
 		clock-names = "mmss_mnoc_ahb_clk",
@@ -147,20 +150,16 @@
 		#iommu-cells = <1>;
 		qcom,dynamic;
 		qcom,use-3-lvl-tables;
-		qcom,disable-atos;
-		qcom,regulator-names = "vdd";
-		#global-interrupts = <2>;
-		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 231 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 329 IRQ_TYPE_LEVEL_HIGH>,
+		qcom,register-save;
+		qcom,skip-init;
+		#global-interrupts = <0>;
+		interrupts = <GIC_SPI 329 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 330 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 331 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 332 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 116 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 117 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 349 IRQ_TYPE_LEVEL_HIGH>,
-			     <GIC_SPI 350 IRQ_TYPE_LEVEL_HIGH>;
+			     <GIC_SPI 116 IRQ_TYPE_LEVEL_HIGH>;
 		qcom,deferred-regulator-disable-delay = <80>;
+		qcom,regulator-names = "vdd";
 		vdd-supply = <&gdsc_gpu_cx>;
 		clocks = <&clock_gcc GCC_GPU_CFG_AHB_CLK>,
 			 <&clock_gcc GCC_BIMC_GFX_CLK>,
@@ -175,9 +174,9 @@
 		compatible = "qcom,smmu-v2";
 		reg = <0x5180000 0x40000>;
 		#iommu-cells = <1>;
+		qcom,use-3-lvl-tables;
 		qcom,register-save;
 		qcom,skip-init;
-		qcom,regulator-names = "vdd";
 		#global-interrupts = <2>;
 		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 231 IRQ_TYPE_LEVEL_HIGH>,
@@ -198,6 +197,7 @@
 			     <GIC_SPI 547 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 548 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 549 IRQ_TYPE_LEVEL_HIGH>;
+		qcom,regulator-names = "vdd";
 		vdd-supply = <&gdsc_hlos1_vote_turing_adsp>;
 		clocks = <&clock_gcc HLOS1_VOTE_TURING_ADSP_SMMU_CLK>;
 		clock-names = "turing_q6_smmu_clk";
