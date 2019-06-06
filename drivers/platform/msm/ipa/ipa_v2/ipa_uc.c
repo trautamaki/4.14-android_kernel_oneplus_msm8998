@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -207,7 +207,7 @@ union IpaHwUpdateFlagsCmdData_t {
 	u32 raw32b;
 };
 
-static struct ipa_uc_hdlrs uc_hdlrs[IPA_HW_NUM_FEATURES] = { { NULL } };
+struct ipa_uc_hdlrs uc_hdlrs[IPA_HW_NUM_FEATURES] = { { 0 } };
 
 static inline const char *ipa_hw_error_str(enum ipa_hw_errors err_type)
 {
@@ -272,10 +272,12 @@ static void ipa_log_evt_hdlr(void)
 		if (ipa_ctx->uc_ctx.uc_sram_mmio->eventParams !=
 			ipa_ctx->uc_ctx.uc_event_top_ofst) {
 			IPAERR("uc top ofst changed new=%u cur=%u\n",
-				ipa_ctx->uc_ctx.uc_sram_mmio->eventParams,
+				ipa_ctx->uc_ctx.uc_sram_mmio->
+					eventParams,
 				ipa_ctx->uc_ctx.uc_event_top_ofst);
 		}
 	}
+
 	return;
 
 bad_uc_top_ofst:
@@ -361,7 +363,7 @@ static void ipa_uc_event_handler(enum ipa_irq_type interrupt,
 			IPAERR("IPA has encountered a ZIP engine error\n");
 			ipa_ctx->uc_ctx.uc_zip_error = true;
 		}
-		ipa_assert();
+		BUG();
 	} else if (ipa_ctx->uc_ctx.uc_sram_mmio->eventOp ==
 		IPA_HW_2_CPU_EVENT_LOG_INFO) {
 		IPADBG("uC evt log info ofst=0x%x\n",
@@ -528,8 +530,9 @@ int ipa_uc_interface_init(void)
 			IPA_SRAM_DIRECT_ACCESS_N_OFST_v2_0(
 			ipa_ctx->smem_restricted_bytes / 4);
 	}
+
 	ipa_ctx->uc_ctx.uc_sram_mmio = ioremap(phys_addr,
-						IPA_RAM_UC_SMEM_SIZE);
+					       IPA_RAM_UC_SMEM_SIZE);
 	if (!ipa_ctx->uc_ctx.uc_sram_mmio) {
 		IPAERR("Fail to ioremap IPA uC SRAM\n");
 		result = -ENOMEM;
@@ -619,8 +622,8 @@ send_cmd:
 		for (index = 0; index < IPA_UC_POLL_MAX_RETRY; index++) {
 			if (ipa_ctx->uc_ctx.uc_sram_mmio->responseOp ==
 			    IPA_HW_2_CPU_RESPONSE_CMD_COMPLETED) {
-				uc_rsp.raw32b =
-				ipa_ctx->uc_ctx.uc_sram_mmio->responseParams;
+				uc_rsp.raw32b = ipa_ctx->uc_ctx.uc_sram_mmio->
+						responseParams;
 				if (uc_rsp.params.originalCmdOp ==
 				    ipa_ctx->uc_ctx.pending_cmd) {
 					ipa_ctx->uc_ctx.pending_cmd = -1;
@@ -635,11 +638,11 @@ send_cmd:
 			IPAERR("uC max polling retries reached\n");
 			if (ipa_ctx->uc_ctx.uc_failed) {
 				IPAERR("uC reported on Error, errorType = %s\n",
-					ipa_hw_error_str(
-					ipa_ctx->uc_ctx.uc_error_type));
+					ipa_hw_error_str(ipa_ctx->
+					uc_ctx.uc_error_type));
 			}
 			mutex_unlock(&ipa_ctx->uc_ctx.uc_lock);
-			ipa_assert();
+			BUG();
 			return -EFAULT;
 		}
 	} else {
@@ -647,12 +650,12 @@ send_cmd:
 			timeout_jiffies) == 0) {
 			IPAERR("uC timed out\n");
 			if (ipa_ctx->uc_ctx.uc_failed) {
-				IPAERR("uC reported on Error,errorType = %s\n",
-				ipa_hw_error_str(
-					ipa_ctx->uc_ctx.uc_error_type));
+				IPAERR("uC reported on Error, errorType = %s\n",
+					ipa_hw_error_str(ipa_ctx->
+					uc_ctx.uc_error_type));
 			}
 			mutex_unlock(&ipa_ctx->uc_ctx.uc_lock);
-			ipa_assert();
+			BUG();
 			return -EFAULT;
 		}
 	}
@@ -766,7 +769,7 @@ int ipa_uc_reset_pipe(enum ipa_client_type ipa_client)
 	       IPA_CLIENT_IS_PROD(ipa_client) ? "CONS" : "PROD", ep_idx);
 
 	ret = ipa_uc_send_cmd(cmd.raw32b, IPA_CPU_2_HW_CMD_RESET_PIPE, 0,
-			      false, 10*HZ);
+			      false, IPA_TIMEOUT(10));
 
 	return ret;
 }
@@ -829,7 +832,7 @@ int ipa_uc_monitor_holb(enum ipa_client_type ipa_client, bool enable)
 
 	ret = ipa_uc_send_cmd(cmd.raw32b,
 				IPA_CPU_2_HW_CMD_UPDATE_HOLB_MONITORING, 0,
-				false, 10*HZ);
+				false, IPA_TIMEOUT(10));
 
 	return ret;
 }
@@ -899,7 +902,7 @@ int ipa_uc_update_hw_flags(u32 flags)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.params.newFlags = flags;
 	return ipa_uc_send_cmd(cmd.raw32b, IPA_CPU_2_HW_CMD_UPDATE_FLAGS, 0,
-		false, HZ);
+		false, IPA_TIMEOUT(1));
 }
 EXPORT_SYMBOL(ipa_uc_update_hw_flags);
 
@@ -932,7 +935,7 @@ int ipa_uc_memcpy(phys_addr_t dest, phys_addr_t src, int len)
 	cmd->source_addr = src;
 	cmd->source_buffer_size = len;
 	res = ipa_uc_send_cmd((u32)mem.phys_base, IPA_CPU_2_HW_CMD_MEMCPY, 0,
-		true, 10 * HZ);
+		true, IPA_TIMEOUT(10));
 	if (res) {
 		IPAERR("ipa_uc_send_cmd failed %d\n", res);
 		goto free_coherent;

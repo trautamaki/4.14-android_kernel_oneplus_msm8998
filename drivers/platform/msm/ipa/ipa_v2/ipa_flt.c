@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -575,7 +575,7 @@ static int ipa_generate_flt_hw_tbl_v1_1(enum ipa_ip_type ip,
 	/* write a dummy header to move cursor */
 	hdr = ipa_write_32(hdr_top, hdr);
 
-	if (ipa_generate_flt_hw_tbl_common(ip, body, hdr, hdr_sz, NULL,
+	if (ipa_generate_flt_hw_tbl_common(ip, body, hdr, hdr_sz, 0,
 				&hdr_top)) {
 		IPAERR("fail to generate FLT HW table\n");
 		goto proc_err;

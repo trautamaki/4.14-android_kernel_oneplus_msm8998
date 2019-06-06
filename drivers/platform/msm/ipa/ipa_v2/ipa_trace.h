@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,7 +12,7 @@
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM ipa
-#define TRACE_INCLUDE_FILE ipa_trace
+#define TRACE_INCLUDE_FILE ../../drivers/platform/msm/ipa/ipa_v2/ipa_trace
 
 #if !defined(_IPA_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _IPA_TRACE_H
