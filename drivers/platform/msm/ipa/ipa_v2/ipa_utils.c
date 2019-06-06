@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,7 +37,7 @@
 
 #define IPA_TAG_SLEEP_MIN_USEC (1000)
 #define IPA_TAG_SLEEP_MAX_USEC (2000)
-#define IPA_FORCE_CLOSE_TAG_PROCESS_TIMEOUT (10 * HZ)
+#define IPA_FORCE_CLOSE_TAG_PROCESS_TIMEOUT IPA_TIMEOUT(10)
 #define IPA_BCR_REG_VAL (0x001FFF7F)
 #define IPA_AGGR_GRAN_MIN (1)
 #define IPA_AGGR_GRAN_MAX (32)
@@ -166,11 +166,6 @@ static const struct ipa_ep_confing ep_mapping[3][IPA_CLIENT_MAX] = {
 
 
 	[IPA_2_6L][IPA_CLIENT_USB_PROD]          =  {true,  1},
-	[IPA_2_6L][IPA_CLIENT_WLAN1_PROD]         = {true, 18},
-	[IPA_2_6L][IPA_CLIENT_WLAN1_CONS]         = {true, 17},
-	[IPA_2_6L][IPA_CLIENT_WLAN2_CONS]         = {true, 16},
-	[IPA_2_6L][IPA_CLIENT_WLAN3_CONS]         = {true, 15},
-	[IPA_2_6L][IPA_CLIENT_WLAN4_CONS]         = {true, 19},
 	[IPA_2_6L][IPA_CLIENT_APPS_LAN_WAN_PROD]  = {true,  4},
 	[IPA_2_6L][IPA_CLIENT_APPS_CMD_PROD]      = {true,  3},
 	[IPA_2_6L][IPA_CLIENT_Q6_LAN_PROD]        = {true,  6},
@@ -185,6 +180,10 @@ static const struct ipa_ep_confing ep_mapping[3][IPA_CLIENT_MAX] = {
 	[IPA_2_6L][IPA_CLIENT_TEST3_PROD]         = {true, 13},
 	[IPA_2_6L][IPA_CLIENT_TEST4_PROD]         = {true, 14},
 
+	[IPA_2_6L][IPA_CLIENT_WLAN1_CONS]         = {true, 17},
+	[IPA_2_6L][IPA_CLIENT_WLAN2_CONS]         = {true, 16},
+	[IPA_2_6L][IPA_CLIENT_WLAN3_CONS]         = {true, 15},
+	[IPA_2_6L][IPA_CLIENT_WLAN4_CONS]         = {true, 19},
 	[IPA_2_6L][IPA_CLIENT_USB_CONS]           = {true,  0},
 	[IPA_2_6L][IPA_CLIENT_USB_DPL_CONS]       = {true, 10},
 	[IPA_2_6L][IPA_CLIENT_APPS_LAN_CONS]      = {true,  2},
@@ -355,7 +354,7 @@ void ipa_active_clients_unlock(void)
  *
  * Return codes: 0 on success, negative on failure.
  */
-static int ipa_get_clients_from_rm_resource(
+int ipa_get_clients_from_rm_resource(
 	enum ipa_rm_resource_name resource,
 	struct ipa_client_names *clients)
 {
@@ -637,7 +636,7 @@ int ipa2_resume_resource(enum ipa_rm_resource_name resource)
  * In case of IPAv2.0 this will also supply an offset from
  * which we can start write
  */
-static void _ipa_sram_settings_read_v1_1(void)
+void _ipa_sram_settings_read_v1_1(void)
 {
 	ipa_ctx->smem_restricted_bytes = 0;
 	ipa_ctx->smem_sz = ipa_read_reg(ipa_ctx->mmio,
@@ -650,7 +649,7 @@ static void _ipa_sram_settings_read_v1_1(void)
 	ipa_ctx->ip6_flt_tbl_lcl = 1;
 }
 
-static void _ipa_sram_settings_read_v2_0(void)
+void _ipa_sram_settings_read_v2_0(void)
 {
 	ipa_ctx->smem_restricted_bytes = ipa_read_reg_field(ipa_ctx->mmio,
 			IPA_SHARED_MEM_SIZE_OFST_v2_0,
@@ -668,7 +667,7 @@ static void _ipa_sram_settings_read_v2_0(void)
 	ipa_ctx->ip6_flt_tbl_lcl = 0;
 }
 
-static void _ipa_sram_settings_read_v2_5(void)
+void _ipa_sram_settings_read_v2_5(void)
 {
 	ipa_ctx->smem_restricted_bytes = ipa_read_reg_field(ipa_ctx->mmio,
 		IPA_SHARED_MEM_SIZE_OFST_v2_0,
@@ -696,7 +695,7 @@ static void _ipa_sram_settings_read_v2_5(void)
 	ipa_ctx->ip6_flt_tbl_lcl = 0;
 }
 
-static void _ipa_sram_settings_read_v2_6L(void)
+void _ipa_sram_settings_read_v2_6L(void)
 {
 	ipa_ctx->smem_restricted_bytes = ipa_read_reg_field(ipa_ctx->mmio,
 		IPA_SHARED_MEM_SIZE_OFST_v2_0,
@@ -714,7 +713,7 @@ static void _ipa_sram_settings_read_v2_6L(void)
 	ipa_ctx->ip6_flt_tbl_lcl = 0;
 }
 
-static void _ipa_cfg_route_v1_1(struct ipa_route *route)
+void _ipa_cfg_route_v1_1(struct ipa_route *route)
 {
 	u32 reg_val = 0;
 
@@ -737,7 +736,7 @@ static void _ipa_cfg_route_v1_1(struct ipa_route *route)
 	ipa_write_reg(ipa_ctx->mmio, IPA_ROUTE_OFST_v1_1, reg_val);
 }
 
-static void _ipa_cfg_route_v2_0(struct ipa_route *route)
+void _ipa_cfg_route_v2_0(struct ipa_route *route)
 {
 	u32 reg_val = 0;
 
@@ -821,13 +820,19 @@ int ipa_cfg_filter(u32 disable)
 int ipa_init_hw(void)
 {
 	u32 ipa_version = 0;
+	u32 ena_bit = 1;
 
 	/* do soft reset of IPA */
 	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_SW_RESET_OFST, 1);
 	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_SW_RESET_OFST, 0);
 
-	/* enable IPA */
-	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_CFG_OFST, 0x11);
+	/* enable IPA Bit:0, enable 2x fast clock Bit:4 */
+	if (of_machine_is_compatible("qcom,sdm630") ||
+	    of_machine_is_compatible("qcom,sdm636") ||
+	    of_machine_is_compatible("qcom,sdm660"))
+		ena_bit = 0x11;
+
+	ipa_write_reg(ipa_ctx->mmio, IPA_COMP_CFG_OFST, ena_bit);
 
 	/* Read IPA version and make sure we have access to the registers */
 	ipa_version = ipa_read_reg(ipa_ctx->mmio, IPA_VERSION_OFST);
@@ -1027,7 +1032,7 @@ enum ipa_client_type ipa2_get_client_mapping(int pipe_idx)
 	return ipa_ctx->ep[pipe_idx].client;
 }
 
-static void ipa_generate_mac_addr_hw_rule(u8 **buf, u8 hdr_mac_addr_offset,
+void ipa_generate_mac_addr_hw_rule(u8 **buf, u8 hdr_mac_addr_offset,
 	const uint8_t mac_addr_mask[ETH_ALEN],
 	const uint8_t mac_addr[ETH_ALEN])
 {
@@ -1710,7 +1715,7 @@ int ipa_generate_hw_rule(enum ipa_ip_type ip,
 	return 0;
 }
 
-static void ipa_generate_flt_mac_addr_eq(struct ipa_ipfltri_rule_eq *eq_atrb,
+void ipa_generate_flt_mac_addr_eq(struct ipa_ipfltri_rule_eq *eq_atrb,
 	u8 hdr_mac_addr_offset,	const uint8_t mac_addr_mask[ETH_ALEN],
 	const uint8_t mac_addr[ETH_ALEN], u8 ofst_meq128)
 {
@@ -2427,7 +2432,7 @@ int ipa2_cfg_ep(u32 clnt_hdl, const struct ipa_ep_cfg *ipa_ep_cfg)
 	return 0;
 }
 
-static const char *ipa_get_nat_en_str(enum ipa_nat_en_type nat_en)
+const char *ipa_get_nat_en_str(enum ipa_nat_en_type nat_en)
 {
 	switch (nat_en) {
 	case (IPA_BYPASS_NAT):
@@ -2441,7 +2446,7 @@ static const char *ipa_get_nat_en_str(enum ipa_nat_en_type nat_en)
 	return "undefined";
 }
 
-static void _ipa_cfg_ep_nat_v1_1(u32 clnt_hdl,
+void _ipa_cfg_ep_nat_v1_1(u32 clnt_hdl,
 		const struct ipa_ep_cfg_nat *ep_nat)
 {
 	u32 reg_val = 0;
@@ -2455,7 +2460,7 @@ static void _ipa_cfg_ep_nat_v1_1(u32 clnt_hdl,
 			reg_val);
 }
 
-static void _ipa_cfg_ep_nat_v2_0(u32 clnt_hdl,
+void _ipa_cfg_ep_nat_v2_0(u32 clnt_hdl,
 		const struct ipa_ep_cfg_nat *ep_nat)
 {
 	u32 reg_val = 0;
@@ -2688,7 +2693,7 @@ int ipa2_cfg_ep_metadata_mask(u32 clnt_hdl,
 	return 0;
 }
 
-static void _ipa_cfg_ep_hdr_v1_1(u32 pipe_number,
+void _ipa_cfg_ep_hdr_v1_1(u32 pipe_number,
 		const struct ipa_ep_cfg_hdr *ep_hdr)
 {
 	u32 val = 0;
@@ -2718,7 +2723,7 @@ static void _ipa_cfg_ep_hdr_v1_1(u32 pipe_number,
 			IPA_ENDP_INIT_HDR_N_OFST_v1_1(pipe_number), val);
 }
 
-static void _ipa_cfg_ep_hdr_v2_0(u32 pipe_number,
+void _ipa_cfg_ep_hdr_v2_0(u32 pipe_number,
 		const struct ipa_ep_cfg_hdr *ep_hdr)
 {
 	u32 reg_val = 0;
@@ -3042,7 +3047,7 @@ int ipa_cfg_eot_coal_cntr_granularity(u8 eot_coal_granularity)
 }
 EXPORT_SYMBOL(ipa_cfg_eot_coal_cntr_granularity);
 
-static const char * const ipa_get_mode_type_str(enum ipa_mode_type mode)
+const char *ipa_get_mode_type_str(enum ipa_mode_type mode)
 {
 	switch (mode) {
 	case (IPA_BASIC):
@@ -3058,7 +3063,7 @@ static const char * const ipa_get_mode_type_str(enum ipa_mode_type mode)
 	return "undefined";
 }
 
-static void _ipa_cfg_ep_mode_v1_1(u32 pipe_number, u32 dst_pipe_number,
+void _ipa_cfg_ep_mode_v1_1(u32 pipe_number, u32 dst_pipe_number,
 		const struct ipa_ep_cfg_mode *ep_mode)
 {
 	u32 reg_val = 0;
@@ -3075,7 +3080,7 @@ static void _ipa_cfg_ep_mode_v1_1(u32 pipe_number, u32 dst_pipe_number,
 			IPA_ENDP_INIT_MODE_N_OFST_v1_1(pipe_number), reg_val);
 }
 
-static void _ipa_cfg_ep_mode_v2_0(u32 pipe_number, u32 dst_pipe_number,
+void _ipa_cfg_ep_mode_v2_0(u32 pipe_number, u32 dst_pipe_number,
 		const struct ipa_ep_cfg_mode *ep_mode)
 {
 	u32 reg_val = 0;
@@ -3154,7 +3159,7 @@ int ipa2_cfg_ep_mode(u32 clnt_hdl, const struct ipa_ep_cfg_mode *ep_mode)
 	return 0;
 }
 
-static const char * const get_aggr_enable_str(enum ipa_aggr_en_type aggr_en)
+const char *get_aggr_enable_str(enum ipa_aggr_en_type aggr_en)
 {
 	switch (aggr_en) {
 	case (IPA_BYPASS_AGGR):
@@ -3168,7 +3173,7 @@ static const char * const get_aggr_enable_str(enum ipa_aggr_en_type aggr_en)
 	return "undefined";
 }
 
-static const char * const get_aggr_type_str(enum ipa_aggr_type aggr_type)
+const char *get_aggr_type_str(enum ipa_aggr_type aggr_type)
 {
 	switch (aggr_type) {
 	case (IPA_MBIM_16):
@@ -3183,13 +3188,11 @@ static const char * const get_aggr_type_str(enum ipa_aggr_type aggr_type)
 			return "GENERIC";
 	case (IPA_QCMAP):
 			return "QCMAP";
-	case (IPA_COALESCE):
-			return "COALESCE";
 	}
 	return "undefined";
 }
 
-static void _ipa_cfg_ep_aggr_v1_1(u32 pipe_number,
+void _ipa_cfg_ep_aggr_v1_1(u32 pipe_number,
 		const struct ipa_ep_cfg_aggr *ep_aggr)
 {
 	u32 reg_val = 0;
@@ -3214,7 +3217,7 @@ static void _ipa_cfg_ep_aggr_v1_1(u32 pipe_number,
 			IPA_ENDP_INIT_AGGR_N_OFST_v1_1(pipe_number), reg_val);
 }
 
-static void _ipa_cfg_ep_aggr_v2_0(u32 pipe_number,
+void _ipa_cfg_ep_aggr_v2_0(u32 pipe_number,
 		const struct ipa_ep_cfg_aggr *ep_aggr)
 {
 	u32 reg_val = 0;
@@ -3286,7 +3289,7 @@ int ipa2_cfg_ep_aggr(u32 clnt_hdl, const struct ipa_ep_cfg_aggr *ep_aggr)
 	return 0;
 }
 
-static void _ipa_cfg_ep_route_v1_1(u32 pipe_index, u32 rt_tbl_index)
+void _ipa_cfg_ep_route_v1_1(u32 pipe_index, u32 rt_tbl_index)
 {
 	int reg_val = 0;
 
@@ -3299,7 +3302,7 @@ static void _ipa_cfg_ep_route_v1_1(u32 pipe_index, u32 rt_tbl_index)
 			reg_val);
 }
 
-static void _ipa_cfg_ep_route_v2_0(u32 pipe_index, u32 rt_tbl_index)
+void _ipa_cfg_ep_route_v2_0(u32 pipe_index, u32 rt_tbl_index)
 {
 	int reg_val = 0;
 
@@ -3370,7 +3373,7 @@ int ipa2_cfg_ep_route(u32 clnt_hdl, const struct ipa_ep_cfg_route *ep_route)
 	return 0;
 }
 
-static void _ipa_cfg_ep_holb_v1_1(u32 pipe_number,
+void _ipa_cfg_ep_holb_v1_1(u32 pipe_number,
 			const struct ipa_ep_cfg_holb *ep_holb)
 {
 	ipa_write_reg(ipa_ctx->mmio,
@@ -3382,7 +3385,7 @@ static void _ipa_cfg_ep_holb_v1_1(u32 pipe_number,
 			(u16)ep_holb->tmr_val);
 }
 
-static void _ipa_cfg_ep_holb_v2_0(u32 pipe_number,
+void _ipa_cfg_ep_holb_v2_0(u32 pipe_number,
 			const struct ipa_ep_cfg_holb *ep_holb)
 {
 	ipa_write_reg(ipa_ctx->mmio,
@@ -3394,7 +3397,7 @@ static void _ipa_cfg_ep_holb_v2_0(u32 pipe_number,
 			(u16)ep_holb->tmr_val);
 }
 
-static void _ipa_cfg_ep_holb_v2_5(u32 pipe_number,
+void _ipa_cfg_ep_holb_v2_5(u32 pipe_number,
 			const struct ipa_ep_cfg_holb *ep_holb)
 {
 	ipa_write_reg(ipa_ctx->mmio,
@@ -3406,7 +3409,7 @@ static void _ipa_cfg_ep_holb_v2_5(u32 pipe_number,
 			ep_holb->tmr_val);
 }
 
-static void _ipa_cfg_ep_holb_v2_6L(u32 pipe_number,
+void _ipa_cfg_ep_holb_v2_6L(u32 pipe_number,
 			const struct ipa_ep_cfg_holb *ep_holb)
 {
 	ipa_write_reg(ipa_ctx->mmio,
@@ -3593,8 +3596,7 @@ static void _ipa_cfg_ep_metadata_v2_0(u32 pipe_number,
  *
  * Note:	Should not be called from atomic context
  */
-static int ipa2_cfg_ep_metadata(u32 clnt_hdl,
-			const struct ipa_ep_cfg_metadata *ep_md)
+int ipa2_cfg_ep_metadata(u32 clnt_hdl, const struct ipa_ep_cfg_metadata *ep_md)
 {
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
 		ipa_ctx->ep[clnt_hdl].valid == 0 || ep_md == NULL) {
@@ -4320,7 +4322,7 @@ static void ipa_init_mem_partition_v2_6L(void)
  *
  *  @ctrl: data structure which holds the function pointers
  */
-static void ipa_controller_shared_static_bind(struct ipa_controller *ctrl)
+void ipa_controller_shared_static_bind(struct ipa_controller *ctrl)
 {
 	ctrl->ipa_init_rt4 = _ipa_init_rt4_v2;
 	ctrl->ipa_init_rt6 = _ipa_init_rt6_v2;
@@ -4909,7 +4911,7 @@ bool ipa2_get_modem_cfg_emb_pipe_flt(void)
  *
  * Return value: enum ipa_transport_type
  */
-static enum ipa_transport_type ipa2_get_transport_type(void)
+enum ipa_transport_type ipa2_get_transport_type(void)
 {
 	return IPA_TRANSPORT_TYPE_SPS;
 }
@@ -4929,8 +4931,7 @@ EXPORT_SYMBOL(ipa_get_num_pipes);
  *
  * Return value: 0 or negative in case of failure
  */
-static int ipa2_disable_apps_wan_cons_deaggr(uint32_t agg_size,
-						uint32_t agg_count)
+int ipa2_disable_apps_wan_cons_deaggr(uint32_t agg_size, uint32_t agg_count)
 {
 	int res = -1;
 
@@ -4995,7 +4996,7 @@ static int ipa2_generate_tag_process(void)
 {
 	int res;
 
-	res = ipa_tag_process(NULL, 0, HZ);
+	res = ipa_tag_process(NULL, 0, IPA_TIMEOUT(1));
 	if (res)
 		IPAERR("TAG process failed\n");
 
@@ -5131,6 +5132,8 @@ int ipa2_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 			ipa2_mhi_reset_channel_internal;
 	api_ctrl->ipa_mhi_start_channel_internal =
 			ipa2_mhi_start_channel_internal;
+	api_ctrl->ipa_mhi_resume_channels_internal =
+			ipa2_mhi_resume_channels_internal;
 	api_ctrl->ipa_uc_mhi_send_dl_ul_sync_info =
 			ipa2_uc_mhi_send_dl_ul_sync_info;
 	api_ctrl->ipa_uc_mhi_init = ipa2_uc_mhi_init;
