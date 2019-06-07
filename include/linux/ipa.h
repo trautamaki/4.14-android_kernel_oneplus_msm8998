@@ -18,6 +18,7 @@
 #include <linux/ipv6.h>
 #include <linux/msm_ipa.h>
 #include "linux/msm_gsi.h"
+#include <linux/msm-sps.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
 #include <linux/msm-sps.h>
@@ -557,7 +558,7 @@ struct ipa_get_wdi_sap_stats {
 /**
  * struct ipa_set_wifi_quota - structure used for
  *                                   IPA_SET_WIFI_QUOTA.
- *
+ *dp
  * @quota_bytes:    Quota (in bytes) for the STA interface.
  * @set_quota:       Indicate whether to set the quota (use 1) or
  *                   unset the quota.
