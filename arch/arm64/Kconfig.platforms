@@ -152,6 +152,16 @@ config ARCH_QCOM
 	help
 	  This enables support for the ARMv8 based Qualcomm chipsets.
 
+config ARCH_MSM8998
+	bool "Enable Support for Qualcomm Technologies, Inc. MSM8998"
+	depends on ARCH_QCOM
+	select COMMON_CLK
+	select COMMON_CLK_QCOM
+	select QCOM_GDSC
+	help
+	  This enables support for the MSM8998 chipset. If you do not
+	  wish to build a kernel that runs on this chipset, say 'N' here.
+
 config ARCH_SDM630
 	bool "Enable Support for Qualcomm Technologies Inc SDM630"
 	depends on ARCH_QCOM
@@ -400,42 +410,41 @@ config ARCH_ZYNQMP
 #
 
 #
-# SoMC Nile platform
+# SoMC Yoshino platform
 #
-
-config ARCH_SONY_NILE
-	bool "Sony Mobile Nile platform"
-	depends on ARCH_SDM630
+config ARCH_SONY_YOSHINO
+	bool "Sony Mobile Yoshino platform"
+	depends on ARCH_MSM8998
 	help
-	  Support for the SONY Mobile Nile platform
-	  which is based on QCOM SDM630 chipset.
+	  Support for the SONY Mobile Yoshino platform
+	  which is based on QCOM MSM8998 chipset.
 	  If you enable this config,
 	  please use SONY Mobile device tree.
 
-config MACH_SONY_PIONEER
-	bool "Sony Mobile Pioneer"
-	depends on ARCH_SONY_NILE
+config MACH_SONY_LILAC
+	bool "Sony Mobile Lilac"
+	depends on ARCH_SONY_YOSHINO
 	help
-	  Support for the SONY Mobile Pioneer device
-	  which is based on SONY Nile platform.
+	  Support for the SONY Mobile Lilac device
+	  which is based on SONY Yoshino platform.
 	  If you enable this config,
 	  please use SONY Mobile device tree.
 
-config MACH_SONY_DISCOVERY
-	bool "Sony Mobile Discovery"
-	depends on ARCH_SONY_NILE
+config MACH_SONY_MAPLE
+	bool "Sony Mobile Maple"
+	depends on ARCH_SONY_YOSHINO
 	help
-	  Support for the SONY Mobile Discovery device
-	  which is based on SONY Nile platform.
+	  Support for the SONY Mobile Maple device
+	  which is based on SONY Yoshino platform.
 	  If you enable this config,
 	  please use SONY Mobile device tree.
 
-config MACH_SONY_VOYAGER
-	bool "Sony Mobile Discovery"
-	depends on ARCH_SONY_NILE
+config MACH_SONY_POPLAR
+	bool "Sony Mobile Poplar"
+	depends on ARCH_SONY_YOSHINO
 	help
-	  Support for the SONY Mobile Discovery device
-	  which is based on SONY Nile platform.
+	  Support for the SONY Mobile Poplar device
+	  which is based on SONY Yoshino platform.
 	  If you enable this config,
 	  please use SONY Mobile device tree.
 
