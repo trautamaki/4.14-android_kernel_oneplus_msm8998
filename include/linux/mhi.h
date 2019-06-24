@@ -125,6 +125,9 @@ enum mhi_dev_state {
 	MHI_STATE_MAX,
 };
 
+#define MHI_VOTE_BUS BIT(0) /* do not disable the bus */
+#define MHI_VOTE_DEVICE BIT(1) /* prevent mhi device from entering lpm */
+
 /**
  * struct mhi_link_info - bw requirement
  * target_link_speed - as defined by TLS bits in LinkControl reg
