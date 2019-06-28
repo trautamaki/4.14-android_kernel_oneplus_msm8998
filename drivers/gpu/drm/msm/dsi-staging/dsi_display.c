@@ -3786,6 +3786,14 @@ static int dsi_display_res_init(struct dsi_display *display)
 		goto error_ctrl_put;
 	}
 
+#ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
+	rc = dsi_panel_driver_create_fs(display);
+	if (rc) {
+		pr_err("%s: faild dsi_panel_driver_create_fs rc=%d\n", __func__, rc);
+		return rc;
+	}
+#endif /* CONFIG_DRM_SDE_SPECIFIC_PANEL */
+
 	return 0;
 error_ctrl_put:
 	for (i = i - 1; i >= 0; i--) {
