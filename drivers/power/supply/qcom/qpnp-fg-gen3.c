@@ -2017,7 +2017,7 @@ static int fg_charge_full_update(struct fg_dev *fg)
 				goto out;
 			}
 			if (msoc >= 99 &&
-			    chip->health == POWER_SUPPLY_HEALTH_GOOD) {
+			    fg->health == POWER_SUPPLY_HEALTH_GOOD) {
 				fg_dbg(chip, FG_SOMC, "Detected FULL\n");
 				chip->charge_full = true;
 				chip->full_counter++;
