@@ -3783,14 +3783,6 @@ static int dsi_display_res_init(struct dsi_display *display)
 		}
 	}
 
-#ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
-	rc = dsi_panel_driver_create_fs(display);
-	if (rc) {
-		pr_err("%s: faild dsi_panel_driver_create_fs rc=%d\n", __func__, rc);
-		return rc;
-	}
-#endif /* CONFIG_DRM_SDE_SPECIFIC_PANEL */
-
 	display->panel = dsi_panel_get(&display->pdev->dev,
 				display->panel_of,
 				display->parser_node,
@@ -3823,6 +3815,14 @@ static int dsi_display_res_init(struct dsi_display *display)
 		pr_err("Failed to parse clock data, rc=%d\n", rc);
 		goto error_ctrl_put;
 	}
+
+#ifdef CONFIG_DRM_SDE_SPECIFIC_PANEL
+	rc = dsi_panel_driver_create_fs(display);
+	if (rc) {
+		pr_err("%s: faild dsi_panel_driver_create_fs rc=%d\n", __func__, rc);
+		return rc;
+	}
+#endif /* CONFIG_DRM_SDE_SPECIFIC_PANEL */
 
 	return 0;
 error_ctrl_put:
