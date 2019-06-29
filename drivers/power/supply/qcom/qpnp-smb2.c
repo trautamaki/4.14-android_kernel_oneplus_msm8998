@@ -1354,6 +1354,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_FORCE_RECHARGE,
+	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 	POWER_SUPPLY_PROP_SMART_CHARGING_ACTIVATION,
@@ -1506,6 +1507,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		val->intval = chg->fcc_stepper_enable;
 		break;
 	case POWER_SUPPLY_PROP_FORCE_RECHARGE:
+		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		val->intval = 0;
 		break;
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
@@ -1676,6 +1680,8 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 			msleep(50);
 			vote(chg->chg_disable_votable, FORCE_RECHARGE_VOTER,
 					false, 0);
+		break;
+	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		break;
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 	case POWER_SUPPLY_PROP_SMART_CHARGING_ACTIVATION:
