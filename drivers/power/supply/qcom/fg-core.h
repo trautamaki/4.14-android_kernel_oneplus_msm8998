@@ -647,7 +647,7 @@ void fg_stay_awake(struct fg_dev *fg, int awake_reason);
 void fg_relax(struct fg_dev *fg, int awake_reason);
 
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-int fg_get_vbatt_predict(struct fg_chip *chip, int *val)
+int fg_get_vbatt_predict(struct fg_chip *chip, int *val);
 #endif
 
 #endif
