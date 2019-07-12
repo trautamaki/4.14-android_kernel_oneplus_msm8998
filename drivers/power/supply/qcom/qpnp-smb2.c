@@ -645,6 +645,9 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_TYPEC_MODE,
 	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
+#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE_FOR_WDET,
+#endif
 	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION,
 	POWER_SUPPLY_PROP_TYPEC_SRC_RP,
 	POWER_SUPPLY_PROP_PD_ALLOWED,
@@ -733,6 +736,9 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 			val->intval = chg->typec_mode;
 		break;
 	case POWER_SUPPLY_PROP_TYPEC_POWER_ROLE:
+#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+	case POWER_SUPPLY_PROP_TYPEC_POWER_ROLE_FOR_WDET:
+#endif /* CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION */
 		if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
 			val->intval = POWER_SUPPLY_TYPEC_PR_NONE;
 		else
@@ -860,6 +866,11 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TYPEC_SRC_RP:
 		rc = smblib_set_prop_typec_select_rp(chg, val);
 		break;
+#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
+	case POWER_SUPPLY_PROP_TYPEC_POWER_ROLE_FOR_WDET:
+		rc = smblib_set_prop_typec_power_role_for_wdet(chg, val);
+		break;
+#endif /* CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION */
 	case POWER_SUPPLY_PROP_PD_ACTIVE:
 		rc = smblib_set_prop_pd_active(chg, val);
 		break;
