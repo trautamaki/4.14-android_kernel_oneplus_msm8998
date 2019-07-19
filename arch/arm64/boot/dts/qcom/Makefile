@@ -64,6 +64,7 @@ dtb-$(CONFIG_MACH_SONY_POPLAR)		+= msm8998-v2.1-yoshino-poplar_generic.dtb
 
 endif
 
+ifeq ($(CONFIG_BUILD_QCOM_REFERENCE_PLATFORMS),y)
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
 		sdmshrike-cdp-overlay.dtbo \
@@ -608,6 +609,8 @@ dtb-$(CONFIG_ARCH_SDM429W) += sdm429-wtp.dtb\
 endif
 
 endif
+
+endif # CONFIG_BUILD_QCOM_REFERENCE_PLATFORMS
 
 ifeq ($(CONFIG_ARM64),y)
 always		:= $(dtb-y)
