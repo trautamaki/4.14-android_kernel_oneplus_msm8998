@@ -194,14 +194,14 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 	.offset = 0x0,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &cam_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "cam_cc_pll0",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -220,7 +220,7 @@ static const struct clk_div_table post_div_table_trion_even[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll0_out_even = {
 	.offset = 0x0,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -240,7 +240,7 @@ static const struct clk_div_table post_div_table_trion_odd[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll0_out_odd = {
 	.offset = 0x0,
-	.post_div_shift = 12,
+	.post_div_shift = ALPHA_POST_DIV_ODD_SHIFT,
 	.post_div_table = post_div_table_trion_odd,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_odd),
 	.width = 4,
@@ -285,14 +285,14 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 	.offset = 0x1000,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &cam_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "cam_cc_pll1",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -306,7 +306,7 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll1_out_even = {
 	.offset = 0x1000,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -335,14 +335,14 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 	.offset = 0x2000,
 	.vco_table = regera_vco,
 	.num_vco = ARRAY_SIZE(regera_vco),
-	.type = REGERA_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_REGERA],
 	.config = &cam_cc_pll2_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "cam_cc_pll2",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_regera_pll_ops,
+			.ops = &clk_alpha_pll_regera_ops,
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -362,7 +362,7 @@ static const struct clk_div_table post_div_table_regera_main[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll2_out_main = {
 	.offset = 0x2000,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_regera_main,
 	.num_post_div = ARRAY_SIZE(post_div_table_regera_main),
 	.width = 2,
@@ -407,14 +407,14 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 	.offset = 0x3000,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &cam_cc_pll3_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "cam_cc_pll3",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -428,7 +428,7 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll3_out_even = {
 	.offset = 0x3000,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -473,14 +473,14 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 	.offset = 0x4000,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &cam_cc_pll4_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "cam_cc_pll4",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -494,7 +494,7 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll4_out_even = {
 	.offset = 0x4000,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -2550,11 +2550,11 @@ static int cam_cc_sm8150_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_trion_pll_configure(&cam_cc_pll0, regmap, cam_cc_pll0.config);
-	clk_trion_pll_configure(&cam_cc_pll1, regmap, cam_cc_pll1.config);
-	clk_regera_pll_configure(&cam_cc_pll2, regmap, cam_cc_pll2.config);
-	clk_trion_pll_configure(&cam_cc_pll3, regmap, cam_cc_pll3.config);
-	clk_trion_pll_configure(&cam_cc_pll4, regmap, cam_cc_pll4.config);
+	clk_alpha_pll_trion_configure(&cam_cc_pll0, regmap, cam_cc_pll0.config);
+	clk_alpha_pll_trion_configure(&cam_cc_pll1, regmap, cam_cc_pll1.config);
+	clk_alpha_pll_regera_configure(&cam_cc_pll2, regmap, cam_cc_pll2.config);
+	clk_alpha_pll_trion_configure(&cam_cc_pll3, regmap, cam_cc_pll3.config);
+	clk_alpha_pll_trion_configure(&cam_cc_pll4, regmap, cam_cc_pll4.config);
 
 	ret = qcom_cc_really_probe(pdev, &cam_cc_sm8150_desc, regmap);
 	if (ret) {
