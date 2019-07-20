@@ -128,14 +128,14 @@ static struct clk_alpha_pll npu_cc_pll0 = {
 	.offset = 0x0,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &npu_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_pll0",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -157,7 +157,7 @@ static const struct clk_div_table post_div_table_trion_even[] = {
 
 static struct clk_alpha_pll_postdiv npu_cc_pll0_out_even = {
 	.offset = 0x0,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -202,14 +202,14 @@ static struct clk_alpha_pll npu_cc_pll1 = {
 	.offset = 0x400,
 	.vco_table = trion_vco,
 	.num_vco = ARRAY_SIZE(trion_vco),
-	.type = TRION_PLL,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.config = &npu_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_pll1",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
-			.ops = &clk_trion_pll_ops,
+			.ops = &clk_alpha_pll_trion_ops,
 			.vdd_class = &vdd_cx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
@@ -223,7 +223,7 @@ static struct clk_alpha_pll npu_cc_pll1 = {
 
 static struct clk_alpha_pll_postdiv npu_cc_pll1_out_even = {
 	.offset = 0x400,
-	.post_div_shift = 8,
+	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
 	.width = 4,
@@ -685,6 +685,10 @@ static void npu_cc_sm8150_fixup_sm8150v2(struct regmap *regmap)
 {
 	npu_cc_pll0.config = &npu_cc_pll0_config_sm8150_v2;
 	npu_cc_pll1.config = &npu_cc_pll1_config_sm8150_v2;
+	clk_alpha_pll_trion_configure(&npu_cc_pll0, regmap,
+		&npu_cc_pll0_config_sm8150_v2);
+	clk_alpha_pll_trion_configure(&npu_cc_pll1, regmap,
+		&npu_cc_pll1_config_sm8150_v2);
 	npu_cc_cal_dp_clk_src.freq_tbl = ftbl_npu_cc_cal_dp_clk_src_sm8150_v2;
 	npu_cc_cal_dp_clk_src.clkr.hw.init->rate_max[VDD_MIN] = 0;
 	npu_cc_cal_dp_clk_src.clkr.hw.init->rate_max[VDD_LOW] = 400000000;
@@ -784,8 +788,8 @@ static int npu_cc_sm8150_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_trion_pll_configure(&npu_cc_pll0, regmap, npu_cc_pll0.config);
-	clk_trion_pll_configure(&npu_cc_pll1, regmap, npu_cc_pll1.config);
+	clk_alpha_pll_trion_configure(&npu_cc_pll0, regmap, &npu_cc_pll0_config);
+	clk_alpha_pll_trion_configure(&npu_cc_pll1, regmap, &npu_cc_pll1_config);
 
 	/* Register the fixed factor clock for CRC divide */
 	ret = devm_clk_hw_register(&pdev->dev, &npu_cc_crc_div.hw);
