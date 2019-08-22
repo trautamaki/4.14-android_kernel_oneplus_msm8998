@@ -497,7 +497,7 @@ static struct usb_ss_ep_comp_descriptor rmnet_gsi_ss_out_comp_desc = {
 	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =		2,
+	.bMaxBurst =		6,
 	/* .bmAttributes =	0, */
 };
 
