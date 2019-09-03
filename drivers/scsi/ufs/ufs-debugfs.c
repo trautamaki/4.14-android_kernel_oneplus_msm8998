@@ -26,7 +26,8 @@
 enum field_width {
 	BYTE	= 1,
 	WORD	= 2,
-#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA)
+#if defined(CONFIG_ARCH_SONY_YOSHINO) ||  defined(CONFIG_ARCH_SONY_TAMA)|| \
+    defined(CONFIG_ARCH_SONY_KUMANO)
 	DWORD	= 4,
 #endif
 };
@@ -914,7 +915,8 @@ static int ufsdbg_dump_device_desc_show(struct seq_file *file, void *data)
 		{"bUDConfigPLength",	0x1B, BYTE},
 		{"bDeviceRTTCap",	0x1C, BYTE},
 		{"wPeriodicRTCUpdate",	0x1D, WORD},
-#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA)
+#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA) ||\
+    defined(CONFIG_ARCH_SONY_KUMANO)
 		{"bUFSFeaturesSupport",	0x1F, BYTE},
 		{"bFFUTimeout",		0x20, BYTE},
 		{"bQueueDepth",		0x21, BYTE},
@@ -949,7 +951,8 @@ static int ufsdbg_dump_device_desc_show(struct seq_file *file, void *data)
 					   tmp->offset,
 					   tmp->name,
 					   *(u16 *)&desc_buf[tmp->offset]);
-#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA)
+#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA) || \
+    defined(CONFIG_ARCH_SONY_KUMANO)
 			} else if (tmp->width_byte == DWORD) {
 				seq_printf(file,
 					   "Device Descriptor[Byte offset 0x%x]: %s = 0x%x\n",
@@ -1074,7 +1077,8 @@ static const struct file_operations ufsdbg_dump_device_desc = {
 	.release	= single_release,
 };
 
-#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA)
+#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA) || \
+    defined(CONFIG_ARCH_SONY_KUMANO)
 static int ufsdbg_dump_fw_revision_show(struct seq_file *file, void *data)
 {
 	int err = 0;
@@ -1939,7 +1943,8 @@ void ufsdbg_add_debugfs(struct ufs_hba *hba)
 		&hba->crash_on_err))
 		goto err;
 
-#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA)
+#if defined(CONFIG_ARCH_SONY_YOSHINO) || defined(CONFIG_ARCH_SONY_TAMA) || \
+    defined(CONFIG_ARCH_SONY_KUMANO)
 	hba->debugfs_files.fw_revision =
 		debugfs_create_file("fw_revision", S_IRUSR,
 				    hba->debugfs_files.debugfs_root, hba,
