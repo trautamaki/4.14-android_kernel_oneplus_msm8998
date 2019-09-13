@@ -604,6 +604,7 @@ static int dsi_ctrl_clocks_init(struct platform_device *pdev,
 	hs_link->byte_clk = devm_clk_get(&pdev->dev, "byte_clk");
 	if (IS_ERR(hs_link->byte_clk)) {
 		rc = PTR_ERR(hs_link->byte_clk);
+		hs_link->byte_clk = NULL;
 		pr_err("failed to get byte_clk, rc=%d\n", rc);
 		hs_link->byte_clk = NULL;
 		goto fail;
@@ -612,6 +613,7 @@ static int dsi_ctrl_clocks_init(struct platform_device *pdev,
 	hs_link->pixel_clk = devm_clk_get(&pdev->dev, "pixel_clk");
 	if (IS_ERR(hs_link->pixel_clk)) {
 		rc = PTR_ERR(hs_link->pixel_clk);
+		hs_link->pixel_clk = NULL;
 		pr_err("failed to get pixel_clk, rc=%d\n", rc);
 		hs_link->pixel_clk = NULL;
 		goto fail;
@@ -620,6 +622,7 @@ static int dsi_ctrl_clocks_init(struct platform_device *pdev,
 	lp_link->esc_clk = devm_clk_get(&pdev->dev, "esc_clk");
 	if (IS_ERR(lp_link->esc_clk)) {
 		rc = PTR_ERR(lp_link->esc_clk);
+		lp_link->esc_clk = NULL;
 		pr_err("failed to get esc_clk, rc=%d\n", rc);
 		lp_link->esc_clk = NULL;
 		goto fail;
@@ -634,6 +637,7 @@ static int dsi_ctrl_clocks_init(struct platform_device *pdev,
 	rcg->byte_clk = devm_clk_get(&pdev->dev, "byte_clk_rcg");
 	if (IS_ERR(rcg->byte_clk)) {
 		rc = PTR_ERR(rcg->byte_clk);
+		rcg->byte_clk = NULL;
 		pr_err("failed to get byte_clk_rcg, rc=%d\n", rc);
 		rcg->byte_clk = NULL;
 		goto fail;
@@ -642,6 +646,7 @@ static int dsi_ctrl_clocks_init(struct platform_device *pdev,
 	rcg->pixel_clk = devm_clk_get(&pdev->dev, "pixel_clk_rcg");
 	if (IS_ERR(rcg->pixel_clk)) {
 		rc = PTR_ERR(rcg->pixel_clk);
+		rcg->pixel_clk = NULL;
 		pr_err("failed to get pixel_clk_rcg, rc=%d\n", rc);
 		rcg->pixel_clk = NULL;
 		goto fail;
