@@ -1614,6 +1614,7 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 
 	mutex_init(&rpm->lock);
 	init_completion(&rpm->ack);
+	probe_status = 0;
 
 skip_init:
 	probe_status = of_platform_populate(p, NULL, NULL, &rpdev->dev);
