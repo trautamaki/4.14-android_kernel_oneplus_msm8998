@@ -36,7 +36,6 @@ dtb-$(CONFIG_ARCH_SM8150)	+= sm8150-cdp.dtb \
 
 endif
 
-ifeq ($(CONFIG_DRM),y)
 # SDM660 - SDE
 dtb-$(CONFIG_MACH_SONY_PIONEER)		+= sdm630-nile-pioneer-sde.dtb
 dtb-$(CONFIG_MACH_SONY_DISCOVERY)	+= sdm630-nile-discovery-sde.dtb
@@ -52,17 +51,6 @@ dtb-$(CONFIG_MACH_SONY_MAPLE)		+= msm8998-v2-yoshino-maple-sde_generic.dtb
 dtb-$(CONFIG_MACH_SONY_MAPLE)		+= msm8998-v2.1-yoshino-maple-sde_generic.dtb
 dtb-$(CONFIG_MACH_SONY_POPLAR)		+= msm8998-v2-yoshino-poplar-sde_generic.dtb
 dtb-$(CONFIG_MACH_SONY_POPLAR)		+= msm8998-v2.1-yoshino-poplar-sde_generic.dtb
-
-else
-# MSM8998 - FBDEV
-dtb-$(CONFIG_MACH_SONY_LILAC)		+= msm8998-v2-yoshino-lilac_generic.dtb
-dtb-$(CONFIG_MACH_SONY_LILAC)		+= msm8998-v2.1-yoshino-lilac_generic.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE)		+= msm8998-v2-yoshino-maple_generic.dtb
-dtb-$(CONFIG_MACH_SONY_MAPLE)		+= msm8998-v2.1-yoshino-maple_generic.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR)		+= msm8998-v2-yoshino-poplar_generic.dtb
-dtb-$(CONFIG_MACH_SONY_POPLAR)		+= msm8998-v2.1-yoshino-poplar_generic.dtb
-
-endif
 
 ifeq ($(CONFIG_BUILD_QCOM_REFERENCE_PLATFORMS),y)
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
