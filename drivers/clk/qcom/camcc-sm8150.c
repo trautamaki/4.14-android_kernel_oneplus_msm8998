@@ -220,6 +220,7 @@ static const struct clk_div_table post_div_table_trion_even[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll0_out_even = {
 	.offset = 0x0,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
@@ -240,6 +241,7 @@ static const struct clk_div_table post_div_table_trion_odd[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll0_out_odd = {
 	.offset = 0x0,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_ODD_SHIFT,
 	.post_div_table = post_div_table_trion_odd,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_odd),
@@ -306,6 +308,7 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll1_out_even = {
 	.offset = 0x1000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
@@ -362,6 +365,7 @@ static const struct clk_div_table post_div_table_regera_main[] = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll2_out_main = {
 	.offset = 0x2000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_regera_main,
 	.num_post_div = ARRAY_SIZE(post_div_table_regera_main),
@@ -428,6 +432,7 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll3_out_even = {
 	.offset = 0x3000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
@@ -494,6 +499,7 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 
 static struct clk_alpha_pll_postdiv cam_cc_pll4_out_even = {
 	.offset = 0x4000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION],
 	.post_div_shift = ALPHA_POST_DIV_EVEN_SHIFT,
 	.post_div_table = post_div_table_trion_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_trion_even),
