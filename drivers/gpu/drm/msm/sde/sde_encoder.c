@@ -2003,6 +2003,10 @@ static int _sde_encoder_update_rsc_client(
 			(rsc_state == SDE_RSC_VID_STATE))
 		rsc_state = SDE_RSC_CLK_STATE;
 
+	if (IS_SDE_MAJOR_SAME(sde_kms->core_rev, SDE_HW_VER_620) &&
+			(rsc_state == SDE_RSC_VID_STATE))
+		rsc_state = SDE_RSC_CLK_STATE;
+
 	SDE_EVT32(rsc_state, qsync_mode);
 
 	prefill_lines = config ? mode_info.prefill_lines +
