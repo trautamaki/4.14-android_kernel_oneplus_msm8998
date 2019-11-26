@@ -4247,7 +4247,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 {
 	struct fg_gen3_chip *chip = power_supply_get_drvdata(psy);
 	struct fg_dev *fg = &chip->fg;
-	int rc = 0;
+	int val, rc = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
@@ -4370,6 +4370,13 @@ static int fg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CC_STEP_SEL:
 		pval->intval = chip->ttf.cc_step.sel;
+		break;
+	case POWER_SUPPLY_PROP_CC_SOC:
+		rc = fg_get_sram_prop(&chip->fg, FG_SRAM_CC_SOC, &val);
+		if (rc < 0) {
+			pr_err("Error in getting CC_SOC, rc=%d\n", rc);
+			return rc;
+		}
 		break;
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 	case POWER_SUPPLY_PROP_CHARGE_FULL_RAW:
@@ -4621,6 +4628,7 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 	POWER_SUPPLY_PROP_CC_STEP,
 	POWER_SUPPLY_PROP_CC_STEP_SEL,
+	POWER_SUPPLY_PROP_CC_SOC,
 #ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 	POWER_SUPPLY_PROP_CHARGE_FULL_RAW,
 	POWER_SUPPLY_PROP_LEARNING_COUNTER,
