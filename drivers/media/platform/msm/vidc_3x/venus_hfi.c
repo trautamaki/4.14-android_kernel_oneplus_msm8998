@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -570,18 +570,17 @@ static int __smem_alloc(struct venus_hfi_device *dev,
 			struct vidc_mem_addr *mem, u32 size, u32 align,
 			u32 flags, u32 usage)
 {
-	struct msm_smem *alloc = &mem->mem_data;
+	struct msm_smem *alloc = NULL;
 	int rc = 0;
 
-	if (!dev || !mem || !size) {
+	if (!dev || !dev->hal_client || !mem || !size) {
 		dprintk(VIDC_ERR, "Invalid Params\n");
 		return -EINVAL;
 	}
 
 	dprintk(VIDC_INFO, "start to alloc size: %d, flags: %d\n", size, flags);
-	rc = msm_smem_alloc(size, align, flags, usage, 1, (void *)dev->res,
-			 MSM_VIDC_UNKNOWN, alloc);
-	if (rc) {
+	alloc = msm_smem_alloc(dev->hal_client, size, align, flags, usage, 1);
+	if (!alloc) {
 		dprintk(VIDC_ERR, "Alloc failed\n");
 		rc = -ENOMEM;
 		goto fail_smem_alloc;
@@ -590,7 +589,7 @@ static int __smem_alloc(struct venus_hfi_device *dev,
 	dprintk(VIDC_DBG, "%s: ptr = %pK, size = %d\n",
 			__func__,
 			alloc->kvaddr, size);
-	rc = msm_smem_cache_operations(alloc->dma_buf, 0, alloc->size,
+	rc = msm_smem_cache_operations(dev->hal_client, alloc,
 		SMEM_CACHE_CLEAN);
 	if (rc) {
 		dprintk(VIDC_WARN, "Failed to clean cache\n");
@@ -598,6 +597,7 @@ static int __smem_alloc(struct venus_hfi_device *dev,
 	}
 
 	mem->mem_size = alloc->size;
+	mem->mem_data = alloc;
 	mem->align_virtual_addr = alloc->kvaddr;
 	mem->align_device_addr = alloc->device_addr;
 	return rc;
@@ -612,7 +612,7 @@ static void __smem_free(struct venus_hfi_device *dev, struct msm_smem *mem)
 		return;
 	}
 
-	msm_smem_free(mem);
+	msm_smem_free(dev->hal_client, mem);
 }
 
 static void __write_register(struct venus_hfi_device *device,
@@ -1750,7 +1750,7 @@ static void __interface_queues_release(struct venus_hfi_device *device)
 	unsigned long mem_map_table_base_addr;
 	struct context_bank_info *cb;
 
-	if (device->qdss.align_virtual_addr) {
+	if (device->qdss.mem_data) {
 		qdss = (struct hfi_mem_map_table *)
 			device->qdss.align_virtual_addr;
 		qdss->mem_map_num_entries = num_entries;
@@ -1767,8 +1767,8 @@ static void __interface_queues_release(struct venus_hfi_device *device)
 		}
 
 		mem_map = (struct hfi_mem_map *)(qdss + 1);
-		cb = msm_smem_get_context_bank(MSM_VIDC_UNKNOWN,
-			false, device->res, HAL_BUFFER_INTERNAL_CMD_QUEUE);
+		cb = msm_smem_get_context_bank(device->hal_client,
+					false, HAL_BUFFER_INTERNAL_CMD_QUEUE);
 
 		for (i = 0; cb && i < num_entries; i++) {
 			iommu_unmap(cb->mapping->domain,
@@ -1776,30 +1776,37 @@ static void __interface_queues_release(struct venus_hfi_device *device)
 						mem_map[i].size);
 		}
 
-		__smem_free(device, &device->qdss.mem_data);
+		__smem_free(device, device->qdss.mem_data);
 	}
 
-	__smem_free(device, &device->iface_q_table.mem_data);
-	__smem_free(device, &device->sfr.mem_data);
+	__smem_free(device, device->iface_q_table.mem_data);
+	__smem_free(device, device->sfr.mem_data);
 
 	for (i = 0; i < VIDC_IFACEQ_NUMQ; i++) {
 		device->iface_queues[i].q_hdr = NULL;
+		device->iface_queues[i].q_array.mem_data = NULL;
 		device->iface_queues[i].q_array.align_virtual_addr = NULL;
 		device->iface_queues[i].q_array.align_device_addr = 0;
 	}
 
+	device->iface_q_table.mem_data = NULL;
 	device->iface_q_table.align_virtual_addr = NULL;
 	device->iface_q_table.align_device_addr = 0;
 
+	device->qdss.mem_data = NULL;
 	device->qdss.align_virtual_addr = NULL;
 	device->qdss.align_device_addr = 0;
 
+	device->sfr.mem_data = NULL;
 	device->sfr.align_virtual_addr = NULL;
 	device->sfr.align_device_addr = 0;
 
+	device->mem_addr.mem_data = NULL;
 	device->mem_addr.align_virtual_addr = NULL;
 	device->mem_addr.align_device_addr = 0;
 
+	msm_smem_delete_client(device->hal_client);
+	device->hal_client = NULL;
 }
 
 static int __get_qdss_iommu_virtual_addr(struct venus_hfi_device *dev,
@@ -1893,7 +1900,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	mem_addr = &dev->mem_addr;
 	if (!is_iommu_present(dev->res))
 		fw_bias = dev->hal_data->firmware_base;
-	rc = __smem_alloc(dev, mem_addr, q_size, 1, SMEM_UNCACHED,
+	rc = __smem_alloc(dev, mem_addr, q_size, 1, 0,
 			HAL_BUFFER_INTERNAL_CMD_QUEUE);
 	if (rc) {
 		dprintk(VIDC_ERR, "iface_q_table_alloc_fail\n");
@@ -1914,6 +1921,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 		iface_q->q_array.align_virtual_addr =
 			mem_addr->align_virtual_addr + offset;
 		iface_q->q_array.mem_size = VIDC_IFACEQ_QUEUE_SIZE;
+		iface_q->q_array.mem_data = NULL;
 		offset += iface_q->q_array.mem_size;
 		iface_q->q_hdr = VIDC_IFACEQ_GET_QHDR_START_ADDR(
 				dev->iface_q_table.align_virtual_addr, i);
@@ -1922,7 +1930,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 
 	if ((msm_vidc_fw_debug_mode & HFI_DEBUG_MODE_QDSS) && num_entries) {
 		rc = __smem_alloc(dev, mem_addr,
-				ALIGNED_QDSS_SIZE, 1, SMEM_UNCACHED,
+				ALIGNED_QDSS_SIZE, 1, 0,
 				HAL_BUFFER_INTERNAL_CMD_QUEUE);
 		if (rc) {
 			dprintk(VIDC_WARN,
@@ -1939,7 +1947,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	}
 
 	rc = __smem_alloc(dev, mem_addr,
-			ALIGNED_SFR_SIZE, 1, SMEM_UNCACHED,
+			ALIGNED_SFR_SIZE, 1, 0,
 			HAL_BUFFER_INTERNAL_CMD_QUEUE);
 	if (rc) {
 		dprintk(VIDC_WARN, "sfr_alloc_fail: SFR not will work\n");
@@ -2004,7 +2012,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 			&dev->iface_q_table.align_device_addr);
 	}
 
-	if (dev->qdss.align_virtual_addr) {
+	if (dev->qdss.mem_data) {
 		qdss = (struct hfi_mem_map_table *)dev->qdss.align_virtual_addr;
 		qdss->mem_map_num_entries = num_entries;
 		mem_map_table_base_addr = dev->qdss.align_device_addr +
@@ -2019,8 +2027,8 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 		}
 
 		mem_map = (struct hfi_mem_map *)(qdss + 1);
-		cb = msm_smem_get_context_bank(MSM_VIDC_UNKNOWN, false,
-				dev->res, HAL_BUFFER_INTERNAL_CMD_QUEUE);
+		cb = msm_smem_get_context_bank(dev->hal_client, false,
+				HAL_BUFFER_INTERNAL_CMD_QUEUE);
 
 		if (!cb) {
 			dprintk(VIDC_ERR,
@@ -2032,7 +2040,8 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 		if (rc) {
 			dprintk(VIDC_ERR,
 				"IOMMU mapping failed, Freeing qdss memdata\n");
-			__smem_free(dev, &dev->qdss.mem_data);
+			__smem_free(dev, dev->qdss.mem_data);
+			dev->qdss.mem_data = NULL;
 			dev->qdss.align_virtual_addr = NULL;
 			dev->qdss.align_device_addr = 0;
 		}
@@ -2186,14 +2195,28 @@ static int venus_hfi_core_init(void *device)
 
 	__set_registers(dev);
 
-	dprintk(VIDC_DBG, "Dev_Virt: %pa, Reg_Virt: %pK\n",
-		&dev->hal_data->firmware_base,
-		dev->hal_data->register_base);
+	if (!dev->hal_client) {
+		dev->hal_client = msm_smem_new_client(
+				SMEM_ION, dev->res, MSM_VIDC_UNKNOWN);
+		if (dev->hal_client == NULL) {
+			dprintk(VIDC_ERR, "Failed to alloc ION_Client\n");
+			rc = -ENODEV;
+			goto err_core_init;
+		}
 
-	rc = __interface_queues_init(dev);
-	if (rc) {
-		dprintk(VIDC_ERR, "failed to init queues\n");
-		rc = -ENOMEM;
+		dprintk(VIDC_DBG, "Dev_Virt: %pa, Reg_Virt: %pK\n",
+			&dev->hal_data->firmware_base,
+			dev->hal_data->register_base);
+
+		rc = __interface_queues_init(dev);
+		if (rc) {
+			dprintk(VIDC_ERR, "failed to init queues\n");
+			rc = -ENOMEM;
+			goto err_core_init;
+		}
+	} else {
+		dprintk(VIDC_ERR, "hal_client exists\n");
+		rc = -EEXIST;
 		goto err_core_init;
 	}
 
@@ -2259,6 +2282,34 @@ static int venus_hfi_core_release(void *dev)
 	mutex_unlock(&device->lock);
 
 	return rc;
+}
+
+static int __get_q_size(struct venus_hfi_device *dev, unsigned int q_index)
+{
+	struct hfi_queue_header *queue;
+	struct vidc_iface_q_info *q_info;
+	u32 write_ptr, read_ptr;
+
+	if (q_index >= VIDC_IFACEQ_NUMQ) {
+		dprintk(VIDC_ERR, "Invalid q index: %d\n", q_index);
+		return -ENOENT;
+	}
+
+	q_info = &dev->iface_queues[q_index];
+	if (!q_info) {
+		dprintk(VIDC_ERR, "cannot read shared Q's\n");
+		return -ENOENT;
+	}
+
+	queue = (struct hfi_queue_header *)q_info->q_hdr;
+	if (!queue) {
+		dprintk(VIDC_ERR, "queue not present\n");
+		return -ENOENT;
+	}
+
+	write_ptr = (u32)queue->qhdr_write_idx;
+	read_ptr = (u32)queue->qhdr_read_idx;
+	return read_ptr - write_ptr;
 }
 
 static void __core_clear_interrupt(struct venus_hfi_device *device)
@@ -3271,11 +3322,9 @@ static void __dump_venus_debug_registers(struct venus_hfi_device *device)
 	dprintk(VIDC_ERR, "VIDC_CPU_CS_SCIACMDARG0: 0x%x\n", reg);
 }
 
-static void print_sfr_message(struct venus_hfi_device *device)
+static void __process_sys_error(struct venus_hfi_device *device)
 {
 	struct hfi_sfr_struct *vsfr = NULL;
-	u32 vsfr_size = 0;
-	void *p = NULL;
 
 	/* Once SYS_ERROR received from HW, it is safe to halt the AXI.
 	 * With SYS_ERROR, Venus FW may have crashed and HW might be
@@ -3287,11 +3336,13 @@ static void print_sfr_message(struct venus_hfi_device *device)
 
 	vsfr = (struct hfi_sfr_struct *)device->sfr.align_virtual_addr;
 	if (vsfr) {
-		vsfr_size = vsfr->bufSize - sizeof(u32);
-		p = memchr(vsfr->rg_data, '\0', vsfr_size);
-		/* SFR isn't guaranteed to be NULL terminated */
+		void *p = memchr(vsfr->rg_data, '\0', vsfr->bufSize);
+		/* SFR isn't guaranteed to be NULL terminated
+		 * since SYS_ERROR indicates that Venus is in the
+		 * process of crashing.
+		 */
 		if (p == NULL)
-			vsfr->rg_data[vsfr_size - 1] = '\0';
+			vsfr->rg_data[vsfr->bufSize - 1] = '\0';
 
 		dprintk(VIDC_ERR, "SFR Message from FW: %s\n",
 				vsfr->rg_data);
@@ -3405,6 +3456,8 @@ static int __response_handler(struct venus_hfi_device *device)
 	}
 
 	if (device->intr_status & VIDC_WRAPPER_INTR_CLEAR_A2HWD_BMSK) {
+		struct hfi_sfr_struct *vsfr = (struct hfi_sfr_struct *)
+			device->sfr.align_virtual_addr;
 		struct msm_vidc_cb_info info = {
 			.response_type = HAL_SYS_WATCHDOG_TIMEOUT,
 			.response.cmd = {
@@ -3412,7 +3465,9 @@ static int __response_handler(struct venus_hfi_device *device)
 			}
 		};
 
-		print_sfr_message(device);
+		if (vsfr)
+			dprintk(VIDC_ERR, "SFR Message from FW: %s\n",
+					vsfr->rg_data);
 
 		__dump_venus_debug_registers(device);
 		dprintk(VIDC_ERR, "Received watchdog timeout\n");
@@ -3440,7 +3495,7 @@ static int __response_handler(struct venus_hfi_device *device)
 		switch (info->response_type) {
 		case HAL_SYS_ERROR:
 			__dump_venus_debug_registers(device);
-			print_sfr_message(device);
+			__process_sys_error(device);
 			break;
 		case HAL_SYS_RELEASE_RESOURCE_DONE:
 			dprintk(VIDC_DBG, "Received SYS_RELEASE_RESOURCE\n");
@@ -3538,7 +3593,8 @@ static int __response_handler(struct venus_hfi_device *device)
 			*session_id = session->session_id;
 		}
 
-		if (packet_count >= max_packets) {
+		if (packet_count >= max_packets &&
+				__get_q_size(device, VIDC_IFACEQ_MSGQ_IDX)) {
 			dprintk(VIDC_WARN,
 					"Too many packets in message queue to handle at once, deferring read\n");
 			break;
@@ -4020,7 +4076,6 @@ static int __protect_cp_mem(struct venus_hfi_device *device)
 	int rc = 0;
 	struct context_bank_info *cb;
 	struct scm_desc desc = {0};
-	bool is_cma_enabled = false;
 
 	if (!device)
 		return -EINVAL;
@@ -4030,11 +4085,9 @@ static int __protect_cp_mem(struct venus_hfi_device *device)
 	memprot.cp_nonpixel_start = 0x0;
 	memprot.cp_nonpixel_size = 0x0;
 
-	is_cma_enabled = device->res->cma_status;
 	list_for_each_entry(cb, &device->res->context_banks, list) {
 		if (!strcmp(cb->name, "venus_ns")) {
 			desc.args[1] = memprot.cp_size =
-				is_cma_enabled ? cb->cma.addr_range.start :
 				cb->addr_range.start;
 			dprintk(VIDC_DBG, "%s memprot.cp_size: %#x\n",
 				__func__, memprot.cp_size);
@@ -4042,10 +4095,8 @@ static int __protect_cp_mem(struct venus_hfi_device *device)
 
 		if (!strcmp(cb->name, "venus_sec_non_pixel")) {
 			desc.args[2] = memprot.cp_nonpixel_start =
-				is_cma_enabled ? cb->cma.addr_range.start :
 				cb->addr_range.start;
 			desc.args[3] = memprot.cp_nonpixel_size =
-				is_cma_enabled ? cb->cma.addr_range.size :
 				cb->addr_range.size;
 			dprintk(VIDC_DBG,
 				"%s memprot.cp_nonpixel_start: %#x size: %#x\n",
