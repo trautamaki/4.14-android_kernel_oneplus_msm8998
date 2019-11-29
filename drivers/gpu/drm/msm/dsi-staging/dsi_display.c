@@ -2293,6 +2293,9 @@ static int dsi_display_parse_boot_display_selection(void)
 			continue;
 		}
 
+		if (strlen(disp_buf) < 2)
+			continue;
+
 		for (j = 0; (disp_buf + j) < pos; j++)
 			boot_displays[i].name[j] = *(disp_buf + j);
 
