@@ -602,6 +602,12 @@ static inline void kgsl_process_sub_stats(struct kgsl_process_private *priv,
 	}
 }
 
+static inline void kgsl_process_sub_stats(struct kgsl_process_private *priv,
+	unsigned int type, uint64_t size)
+{
+	priv->stats[type].cur -= size;
+}
+
 static inline bool kgsl_is_register_offset(struct kgsl_device *device,
 				unsigned int offsetwords)
 {
