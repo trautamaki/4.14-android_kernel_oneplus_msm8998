@@ -519,6 +519,7 @@ static const struct midr_range spectre_v2_safe_list[] = {
 	MIDR_RANGE(MIDR_KRYO4G, 13, 15,
 		   (MIDR_VARIANT_MASK >> MIDR_VARIANT_SHIFT),
 		   MIDR_REVISION_MASK),
+	MIDR_ALL_VERSIONS(MIDR_QCOM_KRYO_4XX_SILVER),
 	{ /* sentinel */ }
 };
 
