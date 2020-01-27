@@ -4,6 +4,8 @@ CFLAGS += -I../.. -I../../../../..
 
 LDLIBS := -llz4 -lcrypto
 EXTRA_SOURCES := utils.c
+CFLAGS += $(EXTRA_SOURCES)
+
 TEST_GEN_PROGS := incfs_test
 
 $(TEST_GEN_PROGS): $(EXTRA_SOURCES)
