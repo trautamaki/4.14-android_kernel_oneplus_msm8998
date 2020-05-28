@@ -3987,42 +3987,6 @@ static inline int __prepare_ahb2axi_bridge(struct venus_hfi_device *device)
 	return 0;
 }
 
-static inline int __unprepare_ahb2axi_bridge(struct venus_hfi_device *device,
-		u32 version)
-{
-	int rc;
-
-	if (!device) {
-		dprintk(VIDC_ERR, "NULL device\n");
-		return -EINVAL;
-	}
-
-	/* reset axi0 and axi1 as needed only for specific video hardware */
-	version &= ~GENMASK(15, 0);
-	if (version != VERSION_HANA)
-		return -EINVAL;
-
-	dprintk(VIDC_ERR,
-			"reset axi cbcr to recover\n");
-
-	rc = __handle_reset_clk(device->res, ASSERT);
-	if (rc) {
-		dprintk(VIDC_ERR, "failed to assert reset clocks\n");
-		return rc;
-	}
-
-	/* wait for deassert */
-	usleep_range(150, 250);
-
-	rc = __handle_reset_clk(device->res, DEASSERT);
-	if (rc) {
-		dprintk(VIDC_ERR, "failed to deassert reset clocks\n");
-		return rc;
-	}
-
-	return 0;
-}
-
 static inline int __prepare_enable_clks(struct venus_hfi_device *device)
 {
 	struct clock_info *cl = NULL, *cl_fail = NULL;
