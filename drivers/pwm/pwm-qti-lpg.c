@@ -1602,7 +1602,7 @@ static int qpnp_lpg_parse_dt(struct qpnp_lpg_chip *chip)
 	/*
 	 * The LPG channel in the same group should have the same ramping
 	 * configuration, so force to use the ramping configuration of the
-	 * 1st LPG channel in the group for sychronization.
+	 * 1st LPG channel in the group for synchronization.
 	 */
 	lpg = &chip->lpgs[chip->lpg_group[0] - 1];
 	ramp = &lpg->ramp_config;
