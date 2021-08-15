@@ -53,6 +53,10 @@ dtb-$(CONFIG_ARCH_MSM8998) += cheeseburger-v2.1-dvt1.dtb
 dtb-$(CONFIG_ARCH_MSM8998) += cheeseburger-v2.1-pvt.dtb
 dtb-$(CONFIG_ARCH_MSM8998) += cheeseburger-v2.1-pvt1.dtb
 dtb-$(CONFIG_ARCH_MSM8998) += cheeseburger-v2.1-backup.dtb
+dtb-$(CONFIG_ARCH_MSM8998) += dumpling-v2.1-dvt.dtb
+dtb-$(CONFIG_ARCH_MSM8998) += dumpling-v2.1-pvt.dtb
+dtb-$(CONFIG_ARCH_MSM8998) += dumpling-v2.1-Second_Resource.dtb
+dtb-$(CONFIG_ARCH_MSM8998) += dumpling-v2.1-backup.dtb
 
 ifeq ($(CONFIG_BUILD_QCOM_REFERENCE_PLATFORMS),y)
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
