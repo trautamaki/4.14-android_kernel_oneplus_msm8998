@@ -396,29 +396,26 @@ void fg_notify_charger(struct fg_dev *fg)
 	if (!fg->profile_available)
 		return;
 
-	if (fg->bp.float_volt_uv > 0) {
-		prop.intval = fg->bp.float_volt_uv;
-		rc = power_supply_set_property(fg->batt_psy,
-				POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
-		if (rc < 0) {
-			pr_err("Error in setting voltage_max property on batt_psy, rc=%d\n",
-				rc);
-			return;
-		}
+	prop.intval = fg->bp.fastchg_curr_ma * 1000;
+	rc = power_supply_set_property(fg->batt_psy,
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+	if (rc < 0) {
+		pr_err("Error in setting constant_charge_current_max property on batt_psy, rc=%d\n",
+			rc);
+		return;
 	}
 
-	if (fg->bp.fastchg_curr_ma > 0) {
-		prop.intval = fg->bp.fastchg_curr_ma * 1000;
-		rc = power_supply_set_property(fg->batt_psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-				&prop);
-		if (rc < 0) {
-			pr_err("Error in setting constant_charge_current_max property on batt_psy, rc=%d\n",
-				rc);
-			return;
-		}
+	rc = power_supply_set_property(fg->batt_psy,
+			POWER_SUPPLY_PROP_NOTIFY_CHARGER_SET_PARAMETER, &prop);
+	if (rc < 0) {
+		pr_err("Error in setting voltage_max property on batt_psy, rc=%d\n",
+			rc);
+		return;
 	}
+
+	fg_dbg(fg, FG_STATUS, "Notified charger on float voltage and FCC\n");
 }
+
 
 bool batt_psy_initialized(struct fg_dev *fg)
 {
@@ -872,19 +869,6 @@ out:
 }
 
 /* All fg_get_* , fg_set_* functions here */
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-int fg_get_vbatt_predict(struct fg_dev *fg, int *val)
-{
-	int rc;
-
-	rc = fg_get_sram_prop(fg, FG_SRAM_VOLTAGE_PRED, val);
-	if (rc < 0) {
-		pr_err("Error in getting VOLTAGE_PRED, rc=%d\n", rc);
-		return rc;
-	}
-	return 0;
-}
-#endif
 
 int fg_get_msoc_raw(struct fg_dev *fg, int *val)
 {
@@ -923,9 +907,6 @@ int fg_get_msoc(struct fg_dev *fg, int *msoc)
 	if (rc < 0)
 		return rc;
 
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-	*msoc = DIV_ROUND_CLOSEST(*msoc * FULL_CAPACITY, FULL_SOC_RAW);
-#else
 	/*
 	 * To have better endpoints for 0 and 100, it is good to tune the
 	 * calculation discarding values 0 and 255 while rounding off. Rest
@@ -939,7 +920,6 @@ int fg_get_msoc(struct fg_dev *fg, int *msoc)
 	else
 		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
 				FULL_SOC_RAW - 2) + 1;
-#endif
 	return 0;
 }
 
@@ -955,25 +935,11 @@ const char *fg_get_battery_type(struct fg_dev *fg)
 	case PROFILE_SKIPPED:
 		return SKIP_BATT_TYPE;
 	case PROFILE_LOADED:
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-		if (fg->bp.batt_type_str) {
-			if (strlen(fg->org_batt_type_str) ==
-							ORG_BATT_TYPE_SIZE)
-				return fg->org_batt_type_str;
-			else
-				return fg->bp.batt_type_str;
-		}
-#else
 		if (fg->bp.batt_type_str)
 			return fg->bp.batt_type_str;
-#endif
 		break;
 	case PROFILE_NOT_LOADED:
-#ifdef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
-		return LOADING_BATT_TYPE; /* TODO: Is that right? */
-#else
 		return MISSING_BATT_TYPE;
-#endif
 	default:
 		break;
 	};
@@ -981,11 +947,8 @@ const char *fg_get_battery_type(struct fg_dev *fg)
 	if (fg->battery_missing)
 		return MISSING_BATT_TYPE;
 
-/* TODO: Is that right? */
-#ifndef CONFIG_QPNP_SMBFG_NEWGEN_EXTENSION
 	if (fg->profile_available)
 		return LOADING_BATT_TYPE;
-#endif
 
 	return DEFAULT_BATT_TYPE;
 }
