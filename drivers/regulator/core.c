@@ -4893,7 +4893,7 @@ static int regulator_debug_suspend_output(struct device *dev, void *data)
 	return 0;
 }
 
-void regulator_debug_suspend() {
+void regulator_debug_suspend(void) {
 	if (!debug_suspend) {
 		return;
 	}
