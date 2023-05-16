@@ -208,7 +208,7 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	unsigned long pressure = action;
 	int array_size = ARRAY_SIZE(lowmem_adj);
 
-	if (enable_adaptive_lmk != ADAPTIVE_LMK_ENABLED)
+	if (enable_adaptive_lmk != ADAPTIVE_LMK_ENABLED) {
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_TNG
 		balance_cache(pressure);
 #endif
