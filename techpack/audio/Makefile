@@ -15,6 +15,5 @@ obj-y += ipc/
 obj-y += asoc/
 
 subdir-ccflags-y += $(call cc-option,-Wno-error=array-parameter)
-subdir-ccflags-y += $(call cc-option,-Wno-error=unused-but-set-variable)
 subdir-ccflags-y += $(call cc-option,-Wno-error=maybe-uninitialized)
 subdir-ccflags-y += $(call cc-option,-Wno-error=misleading-indentation)
